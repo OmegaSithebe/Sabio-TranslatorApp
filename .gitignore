@@ -1,0 +1,62 @@
+# -----------------------------
+# Python Cache & Build Files
+# -----------------------------
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pdb
+*.pkl
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# -----------------------------
+# uv (Python package manager)
+# -----------------------------
+.uv/
+uv.lock
+
+# -----------------------------
+# Virtual Environments
+# -----------------------------
+.venv/
+venv/
+env/
+ENV/
+*.env
+
+# -----------------------------
+# Jupyter Notebook
+# -----------------------------
+.ipynb_checkpoints/
+*.ipynb_convert
+
+# -----------------------------
+# VS Code / Editor Files
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PyCharm
+*.iml
+*.iws
+*.ipr
+
+# -----------------------------
+# OS Generated Files
+# -----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -----------------------------
+# Logs
+# -----------------------------
+*.log
+logs/
