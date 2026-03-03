@@ -131,7 +131,7 @@ input_text = st.text_area("Input Text", key="input_text")
 #with colB:
     #output_text = st.text_area("Translated Output", disabled=True)
 
-colC, colD = st.columns([1,9])
+colC, colD = st.columns([1,15])
 
 with colC:
     clear = st.button("Clear", on_click=clear_input)
