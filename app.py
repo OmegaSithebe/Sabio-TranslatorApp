@@ -48,12 +48,12 @@ body {
 #                  PAGE TITLE
 # ==========================================================
 st.markdown("<h1 style='text-align:center;'>🌐 Universal Document Translator</h1>", unsafe_allow_html=True)
-st.caption("AI-powered translation for PDF & DOCX files • Auto-detect language • Error‑safe")
+st.caption("<h4>AI-powered translation for PDF & DOCX files • Auto-detect language • Error‑safe</h4>", unsafe_allow_html=True)
 
 # ==========================================================
 #                  DOCUMENT TRANSLATOR
 # ==========================================================
-st.markdown("<div class='card'>", unsafe_allow_html=True)
+#st.markdown("<div class='card'>", unsafe_allow_html=True)
 st.subheader("📄 Document Translator")
 
 uploaded = st.file_uploader("Upload PDF or DOCX file", type=["pdf", "docx"])
@@ -70,7 +70,7 @@ output_filename = st.text_input("Output filename (without extension)", "translat
 
 translate_doc = st.button("🔁 Translate Document", type="primary", help="Translate the uploaded file")
 
-st.markdown("</div>", unsafe_allow_html=True)
+#st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================================
 #           PROCESS DOCUMENT TRANSLATION WITH ERRORS
@@ -119,24 +119,28 @@ if translate_doc:
 # ==========================================================
 #                  TEXT TRANSLATOR
 # ==========================================================
-st.markdown("<div class='card'>", unsafe_allow_html=True)
+#st.markdown("<div class='card'>", unsafe_allow_html=True)
 st.subheader("✏️ Text-to-Text Translator")
 
-colA, colB = st.columns(2)
-with colA:
-    input_text = st.text_area("Input Text")
+def clear_input():
+    st.session_state["input_text"] = ""
 
-with colB:
-    output_text = st.text_area("Translated Output", disabled=True)
+input_text = st.text_area("Input Text", key="input_text")
 
-colC, colD = st.columns(2)
+
+#with colB:
+    #output_text = st.text_area("Translated Output", disabled=True)
+
+colC, colD = st.columns([1,9])
+
 with colC:
-    clear = st.button("Clear")
+    clear = st.button("Clear", on_click=clear_input)
+    
 with colD:
-    submit = st.button("Translate Text")
+    submit = st.button("🔁 Translate Text", type="primary")
 
 if clear:
-    st.experimental_rerun()
+    st.rerun()
 
 if submit:
     if not input_text.strip():
