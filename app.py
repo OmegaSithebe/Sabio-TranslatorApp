@@ -77,7 +77,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ==========================================================
 if translate_doc:
     if not uploaded:
-        st.error("❌ No file uploaded.")
+        st.error(" No file uploaded.")
     else:
         if not allowed_file_type(uploaded):
             st.error("❌ Unsupported file type. Only PDF and DOCX allowed.")
