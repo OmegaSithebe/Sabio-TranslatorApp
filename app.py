@@ -54,7 +54,7 @@ st.caption("<h4>AI-powered translation for PDF & DOCX files • Auto-detect lang
 #                  DOCUMENT TRANSLATOR
 # ==========================================================
 #st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("📄 Document Translator")
+st.subheader("Document Translator")
 
 uploaded = st.file_uploader("Upload PDF or DOCX file", type=["pdf", "docx"])
 
@@ -68,7 +68,7 @@ with col2:
 
 output_filename = st.text_input("Output filename (without extension)", "translated_output")
 
-translate_doc = st.button("🔁 Translate Document", type="primary", help="Translate the uploaded file")
+translate_doc = st.button("Translate Document", type="primary", help="Translate the uploaded file")
 
 #st.markdown("</div>", unsafe_allow_html=True)
 
@@ -80,7 +80,7 @@ if translate_doc:
         st.error(" No file uploaded.")
     else:
         if not allowed_file_type(uploaded):
-            st.error("❌ Unsupported file type. Only PDF and DOCX allowed.")
+            st.error("Unsupported file type. Only PDF and DOCX allowed.")
         else:
             # Extract text safely
             if uploaded.name.endswith(".pdf"):
@@ -89,28 +89,28 @@ if translate_doc:
                 text = extract_docx_text(uploaded)
 
             if not text or text.strip() == "":
-                st.error("❌ Could not read text from the document. It may be scanned, encrypted, or corrupted.")
+                st.error("Could not read text from the document. It may be scanned, encrypted, or corrupted.")
             else:
                 # Auto-detect language
                 if auto_detect_enabled:
                     detected = detect_language(text)
                     if detected:
                         source_lang = detected
-                        st.info(f"🌍 Auto-detected source language: **{detected}**")
+                        st.info(f"Auto-detected source language: **{detected}**")
                     else:
-                        st.warning("⚠️ Auto-detection failed. Using manual source language.")
+                        st.warning("Auto-detection failed. Using manual source language.")
 
                 # Translate safely
                 translated = translate_text(text, source_lang, target_lang)
 
                 if not translated:
-                    st.error("❌ Translation failed. Unsupported language or connection error.")
+                    st.error("Translation failed. Unsupported language or connection error.")
                 else:
-                    st.success("✅ Translation completed successfully!")
+                    st.success("Translation completed successfully!")
 
                     buffer = create_translated_docx(translated)
                     st.download_button(
-                        label="📥 Download Translated File",
+                        label="Download Translated File",
                         data=buffer,
                         file_name=f"{output_filename}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -120,7 +120,7 @@ if translate_doc:
 #                  TEXT TRANSLATOR
 # ==========================================================
 #st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("✏️ Text-to-Text Translator")
+st.subheader("Text-to-Text Translator")
 
 def clear_input():
     st.session_state["input_text"] = ""
@@ -137,14 +137,14 @@ with colC:
     clear = st.button("Clear", on_click=clear_input)
     
 with colD:
-    submit = st.button("🔁 Translate Text", type="primary")
+    submit = st.button("Translate Text", type="primary")
 
 if clear:
     st.rerun()
 
 if submit:
     if not input_text.strip():
-        st.error("❌ Please enter text.")
+        st.error("Please enter text.")
     else:
         # Auto detect
         if auto_detect_enabled:
@@ -159,6 +159,6 @@ if submit:
         if translated:
             st.text_area("Translated Output", translated)
         else:
-            st.error("❌ Translation failed.")
+            st.error("Translation failed.")
 
 st.markdown("</div>", unsafe_allow_html=True)
