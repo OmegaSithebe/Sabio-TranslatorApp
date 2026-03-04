@@ -5,7 +5,7 @@ import streamlit as st
 
 # File size limits (in bytes)
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
-ALLOWED_EXTENSIONS = {'.pdf', '.docx'}
+ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.xlsx', '.xls', '.xlsm'}
 
 def allowed_file_type(filename: str) -> bool:
     """
@@ -29,6 +29,17 @@ def get_file_extension(filename: str) -> Optional[str]:
         return None
     return os.path.splitext(filename)[1].lower()
 
+def get_file_type_display(extension: str) -> str:
+    """Get user-friendly file type name"""
+    type_map = {
+        '.pdf': 'PDF Document',
+        '.docx': 'Word Document',
+        '.xlsx': 'Excel Spreadsheet',
+        '.xls': 'Excel Spreadsheet (Legacy)',
+        '.xlsm': 'Excel Macro-Enabled'
+    }
+    return type_map.get(extension.lower(), 'Unknown')
+
 def validate_file(file) -> Tuple[bool, str]:
     """
     Validate uploaded file
@@ -49,7 +60,8 @@ def validate_file(file) -> Tuple[bool, str]:
     
     # Check file type
     if not allowed_file_type(file.name):
-        return False, f"File type not supported: {get_file_extension(file.name)}"
+        ext = get_file_extension(file.name)
+        return False, f"File type {ext} not supported. Please upload PDF, DOCX, or Excel files"
     
     return True, "File valid"
 
@@ -61,3 +73,15 @@ def format_file_size(size_in_bytes: int) -> str:
         return f"{size_in_bytes / 1024:.1f} KB"
     else:
         return f"{size_in_bytes / (1024 * 1024):.1f} MB"
+
+def get_file_icon(filename: str) -> str:
+    """Get appropriate emoji icon for file type"""
+    ext = get_file_extension(filename)
+    if ext == '.pdf':
+        return "📕"
+    elif ext in ['.docx']:
+        return "📘"
+    elif ext in ['.xlsx', '.xls', '.xlsm']:
+        return "📊"
+    else:
+        return "📄"

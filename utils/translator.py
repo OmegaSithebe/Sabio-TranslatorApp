@@ -2,13 +2,13 @@
 from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory, LangDetectException
 import time
-from typing import Optional, Tuple
+from typing import Optional, Dict, List
 import streamlit as st
 
 # Ensure consistent language detection
 DetectorFactory.seed = 42
 
-# Comprehensive language mapping
+# Comprehensive language mapping with bidirectional support
 LANGUAGE_MAP = {
     'en': 'English',
     'es': 'Spanish',
