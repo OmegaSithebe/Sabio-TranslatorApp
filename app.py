@@ -1,706 +1,483 @@
-# app.py
-import streamlit as st
-from utils.pdf_reader import extract_pdf_text
-from utils.docx_reader import extract_docx_text, create_translated_docx
-from utils.excel_reader import extract_excel_text, create_translated_excel, is_excel_file
-from utils.translator import translate_text, detect_language, get_language_name
-from utils.file_utils import (
-    allowed_file_type, 
-    validate_file, 
-    format_file_size, 
-    get_file_icon, 
-    get_file_type_display,
-    get_file_extension  # THIS WAS MISSING - ADDED IMPORT
-)
-import base64
+"""
+app.py — Sabio Translate
+Universal Document Translator that preserves all formatting, images,
+logos, tables, and layout.  Only the text changes.
+"""
+
 from datetime import datetime
+import streamlit as st
 
-# ==========================================================
-# SABIO GROUP BRAND CONFIGURATION
-# ==========================================================
-st.set_page_config(
-    page_title="Sabio Translate - Universal Document Translator",
-    page_icon="🌐",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from utils.pdf_reader   import extract_pdf_text, translate_pdf_inplace
+from utils.docx_reader  import extract_docx_text, translate_docx_inplace
+from utils.excel_reader import extract_excel_text, translate_xlsx_inplace
+from utils.translator   import (
+    translate_text,
+    translate_many,
+    detect_language,
+    get_language_name,
+    SUPPORTED_LANGUAGES,
+)
+from utils.file_utils import (
+    validate_file,
+    format_file_size,
+    get_file_icon,
+    get_file_type_display,
+    get_file_extension,
 )
 
-# Sabio Group Brand Colors
-SABIO_PRIMARY = "#0033A0"  # Sabio Blue
-SABIO_SECONDARY = "#00A3E0"  # Light Blue
-SABIO_ACCENT = "#FF6B35"  # Coral/Orange accent
-SABIO_DARK = "#1E1E2E"
-SABIO_DARK_CARD = "#2A2A3A"
-SABIO_GRAY = "#F5F7FA"
-SABIO_SUCCESS = "#28A745"
-SABIO_WARNING = "#FFC107"
-SABIO_ERROR = "#DC3545"
+# ── Page config ────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title = "Sabio Translate",
+    layout     = "wide",
+    initial_sidebar_state = "expanded",
+)
 
-# Initialize session state for theme
-if 'dark_mode' not in st.session_state:
+# ── Brand tokens ───────────────────────────────────────────────────────────
+PRIMARY   = "#0033A0"
+SECONDARY = "#00A3E0"
+LIGHT_BG  = "#EEF2FB"
+
+# ── Session state ──────────────────────────────────────────────────────────
+if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
 
-# ==========================================================
-# CUSTOM CSS WITH SABIO BRANDING & DARK MODE
-# ==========================================================
-def load_sabio_branding():
-    if st.session_state.dark_mode:
-        bg_color = "#121212"
-        card_bg = "#1E1E2E"
-        text_color = "#FFFFFF"
-        border_color = "#333344"
-        file_info_bg = "#1A1A28"
-        file_info_text = "#FFFFFF"
-        upload_area_text = "#FFFFFF"
-    else:
-        bg_color = "#FFFFFF"
-        card_bg = "#FFFFFF"
-        text_color = "#1A1A1A"
-        border_color = "rgba(0,51,160,0.1)"
-        file_info_bg = "#E8F0FE"  # Light blue background for file info
-        file_info_text = "#0033A0"  # Sabio blue for text
-        upload_area_text = "#666666"  # Darker text for light mode
-    
+
+# ══════════════════════════════════════════════════════════════════════════
+# CSS
+# ══════════════════════════════════════════════════════════════════════════
+
+def _css() -> None:
+    dm = st.session_state.dark_mode
+    bg       = "#0D0D1A"   if dm else "#FFFFFF"
+    surface  = "#1A1A2E"   if dm else "#F5F7FA"
+    card     = "#1E1E30"   if dm else "#FFFFFF"
+    text     = "#F0F0FF"   if dm else "#1A1A2E"
+    muted    = "#8888AA"   if dm else "#6B7280"
+    border   = "rgba(255,255,255,0.07)" if dm else "rgba(0,51,160,0.10)"
+    inp      = "#252538"   if dm else "#FFFFFF"
+    plab     = SECONDARY   if dm else PRIMARY
+
     st.markdown(f"""
     <style>
-        /* Global Styles */
-        .stApp {{
-            background: {bg_color};
-            color: {text_color};
-            transition: all 0.3s ease;
-        }}
-        
-        /* File uploader styling - COMPLETELY REWORKED */
-        .stFileUploader {{
-            margin-top: 1rem;
-        }}
-        
-        /* Target the actual file upload button */
-        .stFileUploader > div > button {{
-            background-color: {SABIO_PRIMARY} !important;
-            color: white !important;
-            border: 2px solid {SABIO_PRIMARY} !important;
-            border-radius: 50px !important;
-            padding: 0.75rem 2rem !important;
-            font-weight: 600 !important;
-            font-size: 1rem !important;
-            width: 100% !important;
-            box-shadow: 0 4px 10px rgba(0,51,160,0.2) !important;
-            transition: all 0.3s ease !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-        }}
-        
-        .stFileUploader > div > button:hover {{
-            background-color: {SABIO_SECONDARY} !important;
-            border-color: {SABIO_SECONDARY} !important;
-            transform: scale(1.02);
-            box-shadow: 0 6px 15px rgba(0,163,224,0.3) !important;
-        }}
-        
-        /* File uploader text */
-        .stFileUploader > div > small {{
-            color: {text_color} !important;
-            opacity: 0.8;
-        }}
-        
-        /* File info display */
-        .file-info {{
-            background: {file_info_bg};
-            padding: 1rem;
-            border-radius: 10px;
-            margin-top: 1rem;
-            border: 1px solid {SABIO_PRIMARY}30;
-        }}
-        
-        .file-info .filename {{
-            color: {SABIO_PRIMARY};
-            font-weight: 600;
-            font-size: 1.1rem;
-        }}
-        
-        .file-info .filesize {{
-            color: {SABIO_SECONDARY};
-            font-weight: 500;
-        }}
-        
-        .file-info .file-details {{
-            color: {file_info_text};
-        }}
-        
-        /* Language selector styling */
-        .language-selector {{
-            background: transparent;
-            color: {text_color};
-        }}
-        
-        /* Sabio Header */
-        .sabio-header {{
-            background: linear-gradient(90deg, {SABIO_PRIMARY} 0%, {SABIO_SECONDARY} 100%);
-            padding: 1.5rem 2rem;
-            border-radius: 0 0 20px 20px;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 20px rgba(0,51,160,0.15);
-            position: relative;
-        }}
-        
-        .sabio-logo-text {{
-            font-size: 2rem;
-            font-weight: 700;
-            color: white;
-            margin: 0;
-            display: inline-block;
-        }}
-        
-        .sabio-tagline {{
-            color: rgba(255,255,255,0.9);
-            font-size: 1rem;
-            margin-top: 0.5rem;
-        }}
-        
-        /* Cards with dark mode support */
-        .sabio-card {{
-            background: {card_bg};
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
-            border: 1px solid {border_color};
-            margin-bottom: 1.5rem;
-            transition: all 0.3s ease;
-            color: {text_color};
-        }}
-        
-        .sabio-card:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,51,160,0.15);
-        }}
-        
-        .sabio-card-header {{
-            border-bottom: 2px solid {SABIO_PRIMARY};
-            padding-bottom: 1rem;
-            margin-bottom: 1.5rem;
-        }}
-        
-        .sabio-card-header h3 {{
-            color: {SABIO_PRIMARY if not st.session_state.dark_mode else SABIO_SECONDARY};
-            margin: 0;
-            font-size: 1.5rem;
-            font-weight: 600;
-        }}
-        
-        /* Upload Area with dark mode */
-        .sabio-upload-area {{
-            border: 3px dashed {SABIO_PRIMARY}40;
-            border-radius: 15px;
-            padding: 2.5rem;
-            text-align: center;
-            background: {SABIO_GRAY if not st.session_state.dark_mode else '#1A1A28'};
-            transition: all 0.3s ease;
-        }}
-        
-        .sabio-upload-area:hover {{
-            border-color: {SABIO_PRIMARY};
-            background: {card_bg};
-        }}
-        
-        .sabio-upload-icon {{
-            font-size: 3rem;
-            color: {SABIO_PRIMARY};
-            margin-bottom: 1rem;
-        }}
-        
-        .sabio-upload-area h4 {{
-            color: {SABIO_PRIMARY} !important;
-            margin-bottom: 0.5rem;
-        }}
-        
-        .sabio-upload-area p {{
-            color: {upload_area_text} !important;
-        }}
-        
-        /* Buttons */
-        .stButton > button {{
-            background: {SABIO_PRIMARY};
-            color: white !important;
-            border: none;
-            padding: 0.75rem 2rem;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            width: 100%;
-            box-shadow: 0 4px 10px rgba(0,51,160,0.2);
-        }}
-        
-        .stButton > button:hover {{
-            background: {SABIO_SECONDARY};
-            transform: scale(1.02);
-            box-shadow: 0 6px 15px rgba(0,163,224,0.3);
-        }}
-        
-        /* Text inputs */
-        .stTextInput > div > div > input,
-        .stTextArea > div > div > textarea,
-        .stSelectbox > div > div > select {{
-            background-color: {card_bg if st.session_state.dark_mode else '#FFFFFF'};
-            color: {text_color};
-            border-color: {border_color};
-        }}
-        
-        /* Language badges */
-        .lang-badge {{
-            background: {SABIO_PRIMARY}15;
-            color: {SABIO_PRIMARY if not st.session_state.dark_mode else SABIO_SECONDARY};
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            display: inline-block;
-            margin: 0.25rem;
-            border: 1px solid {SABIO_PRIMARY}30;
-        }}
-        
-        /* Progress indicators */
-        .stProgress > div > div > div > div {{
-            background-color: {SABIO_PRIMARY};
-        }}
-        
-        /* Footer */
-        .sabio-footer {{
-            text-align: center;
-            padding: 2rem;
-            margin-top: 3rem;
-            border-top: 1px solid {border_color};
-            color: {SABIO_PRIMARY};
-            font-size: 0.9rem;
-        }}
-        
-        /* Success/Info/Warning/Error Messages */
-        .stSuccess {{
-            background: {SABIO_SUCCESS}15;
-            border-left-color: {SABIO_SUCCESS};
-            color: {text_color};
-        }}
-        
-        .stInfo {{
-            background: {SABIO_SECONDARY}15;
-            border-left-color: {SABIO_SECONDARY};
-            color: {text_color};
-        }}
-        
-        .stWarning {{
-            background: {SABIO_WARNING}15;
-            border-left-color: {SABIO_WARNING};
-            color: {text_color};
-        }}
-        
-        .stError {{
-            background: {SABIO_ERROR}15;
-            border-left-color: {SABIO_ERROR};
-            color: {text_color};
-        }}
-        
-        /* Scrollbar for dark mode */
-        {f'''
-        ::-webkit-scrollbar {{
-            width: 10px;
-            background: {SABIO_DARK};
-        }}
-        ::-webkit-scrollbar-thumb {{
-            background: {SABIO_PRIMARY};
-            border-radius: 5px;
-        }}
-        ''' if st.session_state.dark_mode else ''}
-    </style>
-    """, unsafe_allow_html=True)
+    .stApp {{
+        background: {bg};
+        color: {text};
+        font-family: "Inter","Segoe UI",system-ui,sans-serif;
+    }}
+    /* Header */
+    .app-header {{
+        background: linear-gradient(100deg, {PRIMARY} 0%, {SECONDARY} 100%);
+        padding: 1.4rem 2.4rem;
+        border-radius: 0 0 16px 16px;
+        margin-bottom: 1.8rem;
+        box-shadow: 0 4px 24px rgba(0,51,160,0.18);
+    }}
+    .app-header h1 {{
+        color:#fff; font-size:1.85rem; font-weight:700;
+        margin:0; letter-spacing:-.3px;
+    }}
+    .app-header p {{
+        color:rgba(255,255,255,.82); margin:.3rem 0 0; font-size:.9rem;
+    }}
+    .ver-badge {{
+        background:rgba(255,255,255,.18); color:#fff;
+        padding:.28rem .85rem; border-radius:20px; font-size:.8rem;
+    }}
+    /* Cards */
+    .card {{
+        background:{card}; border:1px solid {border};
+        border-radius:13px; padding:1.6rem;
+        margin-bottom:1.4rem;
+        box-shadow:0 2px 10px rgba(0,0,0,.05);
+    }}
+    .card-title {{
+        color:{plab}; font-size:1.08rem; font-weight:600;
+        border-bottom:2px solid {PRIMARY}20;
+        padding-bottom:.65rem; margin-bottom:1.1rem;
+    }}
+    /* Upload zone */
+    .upload-zone {{
+        border:2px dashed {PRIMARY}50; border-radius:11px;
+        padding:1.8rem; text-align:center;
+        background:{"#1A1A2E" if dm else LIGHT_BG};
+        margin-bottom:.9rem;
+    }}
+    .upload-zone p {{ color:{muted}; margin:0; font-size:.88rem; }}
+    .upload-zone strong {{ color:{plab}; font-size:1rem; }}
+    /* File strip */
+    .file-strip {{
+        background:{"#252538" if dm else LIGHT_BG};
+        border:1px solid {PRIMARY}22; border-radius:9px;
+        padding:.8rem 1rem; margin:.6rem 0 1.1rem;
+        display:flex; align-items:center; gap:.9rem;
+    }}
+    .file-strip .badge {{
+        background:{PRIMARY}; color:#fff;
+        font-size:.7rem; font-weight:700;
+        padding:.18rem .5rem; border-radius:5px; letter-spacing:.4px;
+    }}
+    .file-strip .fname {{ color:{plab}; font-weight:600; font-size:.96rem; }}
+    .file-strip .fmeta {{ color:{muted}; font-size:.83rem; }}
+    /* Info box */
+    .info-box {{
+        background:{"#1A2A3A" if dm else "#E8F4FD"};
+        border-left:3px solid {SECONDARY};
+        border-radius:0 8px 8px 0;
+        padding:.7rem 1rem; margin:.6rem 0;
+        font-size:.88rem; color:{text};
+    }}
+    /* Buttons */
+    .stButton > button {{
+        background:{PRIMARY}; color:#fff !important;
+        border:none; padding:.6rem 1.4rem;
+        border-radius:8px; font-weight:600; font-size:.93rem;
+        width:100%; transition:background .2s,transform .15s;
+        box-shadow:0 2px 8px rgba(0,51,160,.2);
+    }}
+    .stButton > button:hover {{
+        background:{SECONDARY}; transform:translateY(-1px);
+    }}
+    /* Inputs */
+    .stTextInput > div > div > input,
+    .stTextArea  > div > div > textarea,
+    .stSelectbox > div > div {{
+        background:{inp} !important; color:{text} !important;
+        border-color:{border} !important; border-radius:8px !important;
+    }}
+    /* Progress */
+    .stProgress > div > div > div > div {{ background:{PRIMARY}; }}
+    /* Sidebar */
+    section[data-testid="stSidebar"] {{
+        background:{surface}; border-right:1px solid {border};
+    }}
+    section[data-testid="stSidebar"] * {{ color:{text} !important; }}
+    /* Footer */
+    .footer {{
+        text-align:center; padding:1.8rem 1rem 1rem;
+        margin-top:1.8rem; border-top:1px solid {border};
+        color:{muted}; font-size:.83rem;
+    }}
+    .footer a {{ color:{plab}; text-decoration:none; }}
+    {"" if not dm else f"""
+    ::-webkit-scrollbar {{ width:7px; background:#0D0D1A; }}
+    ::-webkit-scrollbar-thumb {{ background:{PRIMARY}; border-radius:4px; }}
+    """}
+    </style>""", unsafe_allow_html=True)
 
-# ==========================================================
-# SABIO HEADER
-# ==========================================================
-def render_sabio_header():
-    st.markdown(f"""
-    <div class="sabio-header">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div>
-                <span class="sabio-logo-text">SABIO</span>
-                <span style="color: white; font-size: 2rem; font-weight: 300;">|</span>
-                <span style="color: white; font-size: 1.8rem; font-weight: 300;">Translate</span>
-                <div class="sabio-tagline">Universal Document Translator • Now with Excel Support!</div>
-            </div>
-            <div style="text-align: right;">
-                <span style="color: white; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 50px; font-size: 0.9rem;">
-                    🌐 v2.1
-                </span>
-            </div>
+
+# ══════════════════════════════════════════════════════════════════════════
+# Layout helpers
+# ══════════════════════════════════════════════════════════════════════════
+
+def _header():
+    st.markdown("""
+    <div class="app-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;">
+        <div>
+          <h1>SABIO &nbsp;|&nbsp; Translate</h1>
+          <p>Layout-preserving document translation — PDF, Word, and Excel</p>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        <span class="ver-badge">v3.0</span>
+      </div>
+    </div>""", unsafe_allow_html=True)
 
-# ==========================================================
-# LANGUAGE SUPPORT INFO
-# ==========================================================
-LANGUAGES = {
-    "en": "English",
-    "es": "Spanish",
-    "fr": "French",
-    "de": "German",
-    "it": "Italian",
-    "pt": "Portuguese",
-    "nl": "Dutch",
-    "ru": "Russian",
-    "zh": "Chinese",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "ar": "Arabic",
-    "hi": "Hindi",
-    "tr": "Turkish"
-}
 
-# ==========================================================
-# MAIN APP
-# ==========================================================
-def main():
-    # Theme toggle in sidebar
+def _sidebar():
     with st.sidebar:
-        # Dark mode toggle
-        col_t1, col_t2 = st.columns([1, 3])
-        with col_t1:
-            theme_icon = "🌙" if not st.session_state.dark_mode else "☀️"
-            st.markdown(f"### {theme_icon}")
-        with col_t2:
-            if st.button(
-                "Toggle Dark Mode" if not st.session_state.dark_mode else "Switch to Light Mode",
-                key="theme_toggle",
-                use_container_width=True
-            ):
-                st.session_state.dark_mode = not st.session_state.dark_mode
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Quick info
-        st.markdown("""
-        ### 📖 Quick Guide
-        **📤 1.** Upload PDF, DOCX, or Excel  
-        **🔍 2.** Auto-detect language  
-        **🌍 3.** Choose target language  
-        **📥 4.** Download translation
-        """)
-        
-        st.markdown("---")
-        
-        # Supported languages
-        with st.expander("🌐 Supported Languages (14)"):
-            for code, name in LANGUAGES.items():
-                st.markdown(f"- **{name}** (`{code}`)")
-        
-        # Tips
-        with st.expander("💡 Pro Tips"):
-            st.markdown("""
-            - **New!** Excel files (.xlsx, .xls) now supported
-            - Files up to **200MB** supported
-            - Excel sheets maintain structure
-            - Auto-detect works best with 50+ words
-            - Translate any language back to English
-            """)
-    
-    # Load Sabio branding with current theme
-    load_sabio_branding()
-    
-    # Render header
-    render_sabio_header()
-    
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # Document Translator Card
-        st.markdown("""
-        <div class="sabio-card">
-            <div class="sabio-card-header">
-                <h3>📄 Document Translator</h3>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Upload section
-        st.markdown("""
-        <div class="sabio-upload-area">
-            <div class="sabio-upload-icon">📁</div>
-            <h4>Drop your file here</h4>
-            <p>Supports PDF, DOCX, and Excel files up to 200MB</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        uploaded_file = st.file_uploader(
-            "Choose a file",
-            type=["pdf", "docx", "xlsx", "xls"],
-            label_visibility="collapsed",
-            key="doc_uploader",
-            help="Upload PDF, Word, or Excel documents"
-        )
-        
-        # File info if uploaded
-        if uploaded_file:
-            is_valid, error_msg = validate_file(uploaded_file)
-            if is_valid:
-                file_icon = get_file_icon(uploaded_file.name)
-                file_ext = get_file_extension(uploaded_file.name)  # Now this works!
-                file_type = get_file_type_display(file_ext)
-                
-                st.markdown(f"""
-                <div class="file-info">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 2rem;">{file_icon}</span>
-                        <div>
-                            <div class="filename">{uploaded_file.name}</div>
-                            <div class="file-details">
-                                <span class="filesize">{format_file_size(uploaded_file.size)}</span>
-                                <span style="margin: 0 10px; color: {SABIO_PRIMARY};">•</span>
-                                <span class="filesize">{file_type}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.error(error_msg)
-        
-        # Translation options
-        col_a, col_b, col_c = st.columns(3)
-        #dark auto-detect:
-        if st.session_state.dark_mode == False:
+        label = "Switch to Light Mode" if st.session_state.dark_mode else "Switch to Dark Mode"
+        if st.button(label, use_container_width=True):
+            st.session_state.dark_mode = not st.session_state.dark_mode
+            st.rerun()
 
-            st.markdown("""
-                <style>
-                    /* Targets ALL checkbox label text */
-                    div[data-testid="stCheckbox"] > label > div {
-                        color: black !important;
-                    }
-                </style>
-            """, unsafe_allow_html=True)
-        
-        with col_a:
-            auto_detect = st.checkbox("🔍 Auto-detect", value=True, 
-                                    help="Automatically detect source language")
-        
-        with col_b:
-            if auto_detect:
-                source_lang = "auto"
-                st.markdown(f'<span class="lang-badge">Source: Auto</span>', 
-                          unsafe_allow_html=True)
-            else:
-                source_lang = st.selectbox("From", options=list(LANGUAGES.keys()), 
-                                         format_func=lambda x: LANGUAGES[x], 
-                                         key="source",
-                                         label_visibility="collapsed" if auto_detect else "visible")
-        
-        with col_c:
-            target_lang = st.selectbox("To", options=list(LANGUAGES.keys()), 
-                                      index=0, format_func=lambda x: LANGUAGES[x], 
-                                      key="target",
-                                      label_visibility="collapsed")
-        
-        # Translate button
-        if st.button("🌐 Translate Document", use_container_width=True, type="primary"):
-            if uploaded_file is None:
-                st.error("⚠️ Please upload a file first")
-            else:
-                with st.spinner("🔄 Processing your document..."):
-                    # Progress simulation
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    # Extract text based on file type
-                    status_text.text("📖 Reading document...")
-                    progress_bar.progress(25)
-                    
-                    file_ext = get_file_extension(uploaded_file.name)
-                    
-                    if file_ext == '.pdf':
-                        text = extract_pdf_text(uploaded_file)
-                    elif file_ext == '.docx':
-                        text = extract_docx_text(uploaded_file)
-                    elif file_ext in ['.xlsx', '.xls']:
-                        text = extract_excel_text(uploaded_file)
-                    else:
-                        st.error("❌ Unsupported file type")
-                        progress_bar.empty()
-                        status_text.empty()
-                        return
-                    
-                    if not text or text.strip() == "":
-                        st.error("❌ Could not read text from document. It may be scanned, encrypted, or empty.")
-                        progress_bar.empty()
-                        status_text.empty()
-                    else:
-                        status_text.text("🔍 Analyzing language...")
-                        progress_bar.progress(50)
-                        
-                        # Auto-detect if enabled
-                        if auto_detect:
-                            detected = detect_language(text)
-                            if detected and detected in LANGUAGES:
-                                source_lang = detected
-                                st.success(f"🌍 Detected: {LANGUAGES.get(detected, detected)}")
-                            else:
-                                st.warning("⚠️ Could not detect language, using English as default")
-                                source_lang = "en"
-                        
-                        status_text.text("🌐 Translating...")
-                        progress_bar.progress(75)
-                        
-                        # Translate
-                        translated = translate_text(text, source_lang, target_lang)
-                        
-                        if translated:
-                            progress_bar.progress(100)
-                            status_text.text("✅ Translation complete!")
-                            st.success("✅ Document translated successfully!")
-                            
-                            # Create download based on file type
-                            filename = f"sabio_translated_{datetime.now().strftime('%Y%m%d_%H%M')}"
-                            
-                            if file_ext in ['.xlsx', '.xls']:
-                                buffer = create_translated_excel(translated, uploaded_file.name)
-                                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                file_ext_download = ".xlsx"
-                                download_label = "📥 Download Translated Excel"
-                            else:
-                                buffer = create_translated_docx(translated)
-                                mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                file_ext_download = ".docx"
-                                download_label = "📥 Download Translated Document"
-                            
-                            st.download_button(
-                                label=download_label,
-                                data=buffer,
-                                file_name=f"{filename}{file_ext_download}",
-                                mime=mime_type,
-                                use_container_width=True
-                            )
-                            
-                            # Preview option
-                            with st.expander("👀 Preview Translation"):
-                                preview_text = translated[:500] + "..." if len(translated) > 500 else translated
-                                st.text_area("First 500 characters:", preview_text, height=150)
-                        else:
-                            st.error("❌ Translation failed. Please try again.")
-                        
-                        progress_bar.empty()
-                        status_text.empty()
-    
-    with col2:
-        # Quick Text Translator Card
-        st.markdown("""
-        <div class="sabio-card">
-            <div class="sabio-card-header">
-                <h3>✏️ Quick Text</h3>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        quick_text = st.text_area("Enter text", 
-                                 placeholder="Type or paste text here...", 
-                                 height=100,
-                                 key="quick_text_input",
-                                 label_visibility="collapsed")
-        
-        # Language selection with bidirectional support
-        col_l1, col_l2 = st.columns(2)
-        with col_l1:
-            quick_source = st.selectbox("From", 
-                                      options=["auto"] + list(LANGUAGES.keys()),
-                                      format_func=lambda x: "Auto-detect" if x == "auto" else LANGUAGES[x],
-                                      key="quick_source",
-                                      index=0)
-        with col_l2:
-            quick_target = st.selectbox("To", 
-                                       options=list(LANGUAGES.keys()),
-                                       format_func=lambda x: LANGUAGES[x],
-                                       key="quick_target",
-                                       index=0)
-        
-        if st.button("Translate Text", key="quick_translate", use_container_width=True):
-            if quick_text.strip():
-                with st.spinner("Translating..."):
-                    # Detect language if auto is selected
-                    if quick_source == "auto":
-                        detected = detect_language(quick_text)
-                        if detected:
-                            st.info(f"🌍 Detected: {LANGUAGES.get(detected, detected)}")
-                            source_for_translation = detected
-                        else:
-                            st.warning("Could not detect language, using English")
-                            source_for_translation = "en"
-                    else:
-                        source_for_translation = quick_source
-                    
-                    # Translate
-                    translated = translate_text(quick_text, source_for_translation, quick_target)
-                    
-                    if translated:
-                        st.success("✅ Translation ready!")
-                        st.text_area("Result", translated, height=150, key="translated_result")
-                        
-                        # Show translation direction
-                        st.caption(f"Translated from {LANGUAGES.get(source_for_translation, source_for_translation)} to {LANGUAGES[quick_target]}")
-                        
-                        # Copy button with improved feedback
-                        if st.button("📋 Copy to Clipboard", key="copy", use_container_width=True):
-                            st.info("✅ Text copied to clipboard!")
-                    else:
-                        st.error("❌ Translation failed. Please try again.")
-            else:
-                st.warning("Please enter text to translate")
-        
-        # Quick stats
-        if quick_text:
-            word_count = len(quick_text.split())
-            char_count = len(quick_text)
-            st.markdown(f"""
-            <div style="margin-top: 1rem; padding: 1rem; 
-                       background: {SABIO_GRAY if not st.session_state.dark_mode else '#1A1A28'}; 
-                       border-radius: 10px;">
-                <small>
-                📊 Stats: {word_count} words • {char_count} chars<br>
-                💰 Est. cost: Free (Google Translate)
-                </small>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Recent activity with improved display
+        st.divider()
+        st.markdown("#### How it works")
+        st.markdown(
+            "1. Upload a PDF, DOCX, or XLSX file  \n"
+            "2. Source language is detected automatically  \n"
+            "3. Choose a target language  \n"
+            "4. Download the translated file — logos, tables, and "
+            "formatting are preserved exactly"
+        )
+        st.divider()
+        st.markdown(
+            '<div class="info-box" style="border-left-color:#0033A0">'
+            "<strong>What is preserved?</strong><br>"
+            "Images &amp; logos &nbsp;·&nbsp; Table borders &amp; shading &nbsp;·&nbsp; "
+            "Fonts &amp; colours &nbsp;·&nbsp; Headers &amp; footers &nbsp;·&nbsp; "
+            "Merged cells &nbsp;·&nbsp; Charts"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
+        with st.expander("Supported languages"):
+            for code, name in SUPPORTED_LANGUAGES.items():
+                st.markdown(f"- **{name}** `{code}`")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Document translator panel
+# ══════════════════════════════════════════════════════════════════════════
+
+def _doc_panel():
+    st.markdown('<div class="card"><div class="card-title">Document Translator</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="upload-zone">
+        <strong>Select or drop a file</strong>
+        <p>PDF · DOCX · XLSX &nbsp;—&nbsp; up to 200 MB</p>
+    </div>""", unsafe_allow_html=True)
+
+    uploaded = st.file_uploader(
+        "file", type=["pdf", "docx", "xlsx"],
+        label_visibility="collapsed", key="doc_up",
+    )
+
+    if uploaded:
+        ok, msg = validate_file(uploaded)
+        if not ok:
+            st.error(msg)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        ext   = get_file_extension(uploaded.name)
+        badge = get_file_icon(uploaded.name)
         st.markdown(f"""
-        <div class="sabio-card" style="margin-top: 1rem;">
-            <div class="sabio-card-header">
-                <h3>📊 Recent Activity</h3>
-            </div>
-            <div style="font-size: 0.9rem;">
-                <p>• 📊 Sales_Data.xlsx → Spanish</p>
-                <p>• 📄 Q4_Report.pdf → French</p>
-                <p>• 📄 Contract.docx → German</p>
-                <p>• 📊 Inventory.xls → Japanese</p>
-            </div>
-            <div style="margin-top: 1rem;">
-                <span class="lang-badge">Today: 5 files</span>
-                <span class="lang-badge">This week: 28 files</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Footer with Sabio branding
-    st.markdown(f"""
-    <div class="sabio-footer">
-        <div style="font-size: 1.2rem; font-weight: 600; color: {SABIO_PRIMARY}; margin-bottom: 0.5rem;">
-            SABIO GROUP
-        </div>
-        <div style="color: #666;">
-            © {datetime.now().year} Sabio Group. All rights reserved.<br>
-            Enterprise Document Translation Solution v2.1 • Now with Excel Support
-            <a href="#" style="color: {SABIO_PRIMARY}; text-decoration: none; margin-left: 10px;">Privacy</a> • 
-            <a href="#" style="color: {SABIO_PRIMARY}; text-decoration: none;">Terms</a>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div class="file-strip">
+          <span class="badge">{badge}</span>
+          <div>
+            <div class="fname">{uploaded.name}</div>
+            <div class="fmeta">{format_file_size(uploaded.size)} &nbsp;·&nbsp;
+                               {get_file_type_display(ext)}</div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+    col_a, col_b, col_c = st.columns([1, 1, 1])
+    with col_a:
+        auto = st.checkbox("Auto-detect source language", value=True)
+    with col_b:
+        if auto:
+            src = "auto"
+            st.caption("Source: Auto-detect")
+        else:
+            src = st.selectbox(
+                "Source language",
+                list(SUPPORTED_LANGUAGES.keys()),
+                format_func=lambda c: SUPPORTED_LANGUAGES[c],
+                key="doc_src",
+            )
+    with col_c:
+        tgt = st.selectbox(
+            "Target language",
+            list(SUPPORTED_LANGUAGES.keys()),
+            format_func=lambda c: SUPPORTED_LANGUAGES[c],
+            key="doc_tgt",
+            index=0,   # English first
+        )
+
+    if st.button("Translate Document", use_container_width=True):
+        if uploaded is None:
+            st.warning("Please upload a file before translating.")
+        else:
+            _run(uploaded, src, tgt)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ── Core translation runner ────────────────────────────────────────────────
+
+def _run(uploaded, src: str, tgt: str):
+    progress = st.progress(0)
+    status   = st.empty()
+
+    try:
+        ext = get_file_extension(uploaded.name)
+
+        # 1 ── Extract text for language detection
+        status.text("Reading document...")
+        progress.progress(15)
+        uploaded.seek(0)
+
+        if ext == ".pdf":
+            sample_text = extract_pdf_text(uploaded)
+        elif ext == ".docx":
+            sample_text = extract_docx_text(uploaded)
+        elif ext == ".xlsx":
+            sample_text = extract_excel_text(uploaded)
+        else:
+            st.error(f"Unsupported file type: {ext}")
+            return
+
+        if not sample_text or not sample_text.strip():
+            st.error(
+                "No readable text was found.  The file may be scanned, "
+                "encrypted, or empty."
+            )
+            return
+
+        # 2 ── Detect source language
+        status.text("Detecting language...")
+        progress.progress(30)
+
+        if src == "auto":
+            detected = detect_language(sample_text)
+            if detected:
+                src = detected
+                st.info(f"Detected language: {get_language_name(detected)}")
+            else:
+                src = "en"
+                st.warning("Language could not be detected — defaulting to English.")
+
+        if src == tgt:
+            st.warning("Source and target languages are the same — nothing to translate.")
+            return
+
+        # 3 ── Build translate callables bound to src/tgt
+        progress.progress(40)
+
+        def _translate_one(text: str) -> str:
+            """Single-string fallback (used for OCR and Quick Text)."""
+            if not text or not text.strip():
+                return text
+            return translate_text(text, src, tgt) or text
+
+        def _translate_batch(strings: list[str]) -> dict[str, str]:
+            """
+            Fast path: batch + parallel translation of many strings at once.
+            Returns dict mapping original → translated.
+            """
+            return translate_many(strings, src, tgt)
+
+        # 4 ── Translate in-place (batch mode)
+        status.text("Translating — batching requests for speed...")
+        progress.progress(55)
+        uploaded.seek(0)
+
+        if ext == ".pdf":
+            out_buf = translate_pdf_inplace(uploaded, _translate_one,
+                                            translate_many_fn=_translate_batch)
+            mime    = "application/pdf"
+            dl_ext  = ".pdf"
+            dl_lbl  = "Download Translated PDF"
+
+        elif ext == ".docx":
+            out_buf = translate_docx_inplace(uploaded, _translate_one,
+                                             translate_many_fn=_translate_batch)
+            mime    = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            dl_ext  = ".docx"
+            dl_lbl  = "Download Translated Word Document"
+
+        elif ext == ".xlsx":
+            out_buf = translate_xlsx_inplace(uploaded, _translate_one,
+                                             translate_many_fn=_translate_batch)
+            mime    = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            dl_ext  = ".xlsx"
+            dl_lbl  = "Download Translated Excel File"
+
+        progress.progress(95)
+
+        if out_buf is None:
+            st.error("Translation failed.  Check the warnings above for details.")
+            return
+
+        progress.progress(100)
+        status.text("Complete.")
+        st.success("Translation complete.  All formatting, images, and tables are preserved.")
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M")
+        st.download_button(
+            label     = dl_lbl,
+            data      = out_buf,
+            file_name = f"sabio_translated_{ts}{dl_ext}",
+            mime      = mime,
+            use_container_width=True,
+        )
+
+    finally:
+        progress.empty()
+        status.empty()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Quick Text panel
+# ══════════════════════════════════════════════════════════════════════════
+
+def _text_panel():
+    st.markdown('<div class="card"><div class="card-title">Quick Text Translator</div>', unsafe_allow_html=True)
+
+    text_in = st.text_area(
+        "Text", placeholder="Paste or type text here...",
+        height=120, key="qt_in", label_visibility="collapsed",
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        qs = st.selectbox(
+            "From",
+            ["auto"] + list(SUPPORTED_LANGUAGES.keys()),
+            format_func=lambda c: "Auto-detect" if c == "auto" else SUPPORTED_LANGUAGES[c],
+            key="qt_src",
+        )
+    with c2:
+        qt = st.selectbox(
+            "To",
+            list(SUPPORTED_LANGUAGES.keys()),
+            format_func=lambda c: SUPPORTED_LANGUAGES[c],
+            key="qt_tgt",
+            index=0,
+        )
+
+    if st.button("Translate Text", key="qt_btn", use_container_width=True):
+        if not text_in.strip():
+            st.warning("Please enter some text.")
+        else:
+            with st.spinner("Translating..."):
+                s = qs
+                if qs == "auto":
+                    det = detect_language(text_in)
+                    if det:
+                        st.info(f"Detected: {get_language_name(det)}")
+                        s = det
+                    else:
+                        s = "en"
+                result = translate_text(text_in, s, qt)
+            if result:
+                st.success("Done.")
+                st.text_area("Result", result, height=160, key="qt_out")
+                st.caption(f"{get_language_name(s)} → {get_language_name(qt)}")
+            else:
+                st.error("Translation failed.")
+
+    if text_in:
+        st.caption(f"{len(text_in.split())} words · {len(text_in)} characters")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Entry point
+# ══════════════════════════════════════════════════════════════════════════
+
+def main():
+    _sidebar()
+    _css()
+    _header()
+
+    col_l, col_r = st.columns([2, 1])
+    with col_l:
+        _doc_panel()
+    with col_r:
+        _text_panel()
+
+    st.markdown(
+        f'<div class="footer">'
+        f'<strong style="color:{PRIMARY};font-size:.95rem;">SABIO GROUP</strong><br>'
+        f'&copy; {datetime.now().year} Sabio Group. All rights reserved. &nbsp;|&nbsp; '
+        f'Enterprise Document Translation &nbsp;·&nbsp; v3.0 &nbsp;·&nbsp; '
+        f'<a href="#">Privacy</a> &nbsp;·&nbsp; <a href="#">Terms</a>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
 
 if __name__ == "__main__":
     main()
