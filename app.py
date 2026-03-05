@@ -467,6 +467,17 @@ def main():
         
         # Translation options
         col_a, col_b, col_c = st.columns(3)
+        #dark auto-detect:
+        if st.session_state.dark_mode == False:
+
+            st.markdown("""
+                <style>
+                    /* Targets ALL checkbox label text */
+                    div[data-testid="stCheckbox"] > label > div {
+                        color: black !important;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
         
         with col_a:
             auto_detect = st.checkbox("🔍 Auto-detect", value=True, 
