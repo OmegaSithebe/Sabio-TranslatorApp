@@ -23,7 +23,13 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-import streamlit as st
+
+# Optional local .env support:
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 SUPPORTED_LANGUAGES: dict[str, str] = {
     "en": "English",
@@ -238,21 +244,50 @@ def _translate_batch(batch: list[str], source: str, target: str) -> dict[str, st
 
 def _translate_one(text: str, source: str, target: str) -> Optional[str]:
     """Single-string translation with retry logic."""
+    if not text:
+        return ""
+
+    # Keep source/target simple (e.g., "en", "es")
+    source = source.split("-")[0].lower()
+    target = target.split("-")[0].lower()
+
+    if source == target:
+        return text
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+
     try:
-        from deep_translator import GoogleTranslator
+        from openai import OpenAI
     except ImportError:
-        st.error("deep-translator not installed. Run: pip install deep-translator")
-        return None
+        raise ImportError("openai package not installed. Run: pip install openai")
+
+    client = OpenAI(api_key=api_key)
+
+    prompt = (
+        "You are a translation assistant. Translate only the text provided, and do not add anything else. "
+        f"Translate from {source} to {target}. Preserve punctuation, line breaks, and formatting where possible.\n\n"
+        f"Text:\n{text}"
+    )
 
     for attempt in range(_RETRIES):
         try:
-            result = GoogleTranslator(source=source, target=target).translate(text)
-            if result:
-                return result
+            response = client.responses.create(
+                model="gpt-4.1-mini",
+                input=prompt,
+                temperature=0,
+                max_output_tokens=4096,
+            )
+            if hasattr(response, "output_text") and response.output_text:
+                return response.output_text.strip()
+            if hasattr(response, "output") and isinstance(response.output, list):
+                text_out = "".join([item.get("content", "") for item in response.output if isinstance(item, dict)])
+                return text_out.strip() if text_out else None
         except Exception as exc:
             err = str(exc)
-            if "429" in err:
-                time.sleep(_RETRY_DELAY * (attempt + 2))   # back off harder on rate limit
+            if "429" in err or "quota" in err.lower():
+                time.sleep(_RETRY_DELAY * (attempt + 2))
             elif attempt < _RETRIES - 1:
                 time.sleep(_RETRY_DELAY)
             else:

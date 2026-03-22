@@ -19,10 +19,10 @@ Images, logos, table borders, and all non-text content are untouched.
 
 import io
 from typing import Callable, Optional
-import streamlit as st
 
 
 def extract_pdf_text(file) -> Optional[str]:
+
     """Extract plain text for language detection (structure not needed)."""
     try:
         import fitz
@@ -32,8 +32,7 @@ def extract_pdf_text(file) -> Optional[str]:
         doc.close()
         return "\n\n".join(parts) or ""
     except Exception as exc:
-        st.error(f"Could not read PDF: {exc}")
-        return None
+        raise RuntimeError(f"Could not read PDF: {exc}")
 
 
 def translate_pdf_inplace(
@@ -54,27 +53,22 @@ def translate_pdf_inplace(
     """
     try:
         import fitz
-    except ImportError:
-        st.error("PyMuPDF not installed. Run: pip install pymupdf")
-        return None
+    except ImportError as exc:
+        raise RuntimeError("PyMuPDF not installed. Run: pip install pymupdf") from exc
 
     try:
         file.seek(0)
         doc = fitz.open(stream=file.read(), filetype="pdf")
     except Exception as exc:
-        st.error(f"Could not open PDF: {exc}")
-        return None
+        raise RuntimeError(f"Could not open PDF: {exc}") from exc
 
     has_text = any(page.get_text().strip() for page in doc)
 
     if not has_text:
-        st.warning(
+        raise RuntimeError(
             "This PDF has no selectable text (fully scanned). "
             "Install pytesseract and Pillow for OCR support."
         )
-        result = _translate_scanned(doc, translate_fn)
-        doc.close()
-        return result
 
     try:
         # ── Pass 1: collect every translatable span from all pages ────────
@@ -148,9 +142,8 @@ def translate_pdf_inplace(
         return buf
 
     except Exception as exc:
-        st.error(f"Error translating PDF: {exc}")
         doc.close()
-        return None
+        raise RuntimeError(f"Error translating PDF: {exc}")
 
 
 # ── Text insertion helper ─────────────────────────────────────────────────
@@ -180,12 +173,10 @@ def _translate_scanned(doc, translate_fn: Callable) -> Optional[io.BytesIO]:
         import pytesseract
         from PIL import Image
         import io as _io
-    except ImportError:
-        st.error(
-            "Scanned PDF detected. Install pytesseract and Pillow: "
-            "pip install pytesseract Pillow"
-        )
-        return None
+    except ImportError as exc:
+        raise RuntimeError(
+            "Scanned PDF detected. Install pytesseract and Pillow: pip install pytesseract Pillow"
+        ) from exc
 
     for page in doc:
         mat      = page.get_pixmap(dpi=200)

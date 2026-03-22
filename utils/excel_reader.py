@@ -15,7 +15,6 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Callable, Optional
-import streamlit as st
 
 for _pfx, _uri in {
     "":       "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -60,8 +59,7 @@ def extract_excel_text(file) -> Optional[str]:
                         parts.append(str(val))
         return "\n".join(parts)
     except Exception as exc:
-        st.error(f"Could not read Excel file: {exc}")
-        return None
+        raise RuntimeError(f"Could not read Excel file: {exc}") from exc
 
 
 def translate_xlsx_inplace(
@@ -82,21 +80,18 @@ def translate_xlsx_inplace(
         file.seek(0)
         raw = file.read()
     except Exception as exc:
-        st.error(f"Could not read file: {exc}")
-        return None
+        raise RuntimeError(f"Could not read file: {exc}") from exc
 
     if raw[:2] == b"\xd0\xcf":
-        st.error(
+        raise RuntimeError(
             "Legacy .xls files cannot be translated in-place (binary format). "
             "Open in Excel, save as .xlsx, then re-upload."
         )
-        return None
 
     try:
         src = zipfile.ZipFile(io.BytesIO(raw), "r")
     except Exception as exc:
-        st.error(f"File does not appear to be a valid XLSX: {exc}")
-        return None
+        raise RuntimeError(f"File does not appear to be a valid XLSX: {exc}") from exc
 
     # ── Pass 1: parse shared strings, collect all translatable strings ────
     ss_data: Optional[bytes]       = None

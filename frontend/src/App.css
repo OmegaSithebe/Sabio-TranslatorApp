@@ -1,0 +1,26 @@
+:root {
+  font-family: Inter, system-ui, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.app-shell { max-width: 900px; margin: 0 auto; padding: 20px; }
+.header { display:flex; justify-content:space-between; align-items:start; gap:12px; margin-bottom:12px; }
+.eyebrow { margin:0; color:#2563eb; font-weight:700; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; }
+.subtitle { margin:0; color:#4b5563; }
+.pill { background:#e0e7ff; color:#1d4ed8; border-radius:999px; padding:.35rem .8rem; font-weight:700; font-size:.75rem; }
+.tabs { display:flex; gap:8px; margin-bottom:12px; }
+.tabs button { border:none; background:#e2e8f0; color:#111827; padding:.45rem .9rem; border-radius:8px; cursor:pointer; font-weight:700; }
+.tabs button.active { background:#2563eb; color:#fff; }
+.card { background:#fff; border:1px solid #d1d5db; border-radius:12px; padding:14px; margin-bottom:14px; }
+.card h2 { margin-top:0; }
+textarea, input, select { width:100%; padding:.65rem .7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; margin-top:6px; }
+button { background:#2563eb; color:#fff; border:none; border-radius:8px; padding:.6rem .9rem; font-weight:700; cursor:pointer; margin-top:10px; }
+button:disabled { opacity:.6; cursor:not-allowed; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+.field label { font-weight:700; font-size:.85rem; }
+.error { margin-top:10px; color:#b91c1c; font-weight:600; }
+.footer { color:#475569; font-size:.85rem; margin-top:6px; }
+@media (max-width: 700px) { .row { grid-template-columns:1fr; } }
