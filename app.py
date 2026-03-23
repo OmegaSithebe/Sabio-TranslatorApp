@@ -1,7 +1,6 @@
 """
 app.py — Sabio Translate
-Universal Document Translator that preserves all formatting, images,
-logos, tables, and layout.  Only the text changes.
+Single-Page Universal Document Translator
 """
 
 from datetime import datetime
@@ -27,456 +26,503 @@ from utils.file_utils import (
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title = "Sabio Translate",
-    layout     = "wide",
-    initial_sidebar_state = "expanded",
+    page_title="Sabio Translate",
+    page_icon="🌐",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ── Brand tokens ───────────────────────────────────────────────────────────
-PRIMARY   = "#0033A0"
+PRIMARY = "#0066CC"
 SECONDARY = "#00A3E0"
-LIGHT_BG  = "#EEF2FB"
 
 # ── Session state ──────────────────────────────────────────────────────────
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
+if "show_languages" not in st.session_state:
+    st.session_state.show_languages = False
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# CSS
+# CSS - Clean, Single Page Layout
 # ══════════════════════════════════════════════════════════════════════════
 
 def _css() -> None:
     dm = st.session_state.dark_mode
-    bg       = "#0D0D1A"   if dm else "#FFFFFF"
-    surface  = "#1A1A2E"   if dm else "#F5F7FA"
-    card     = "#1E1E30"   if dm else "#FFFFFF"
-    text     = "#F0F0FF"   if dm else "#1A1A2E"
-    muted    = "#8888AA"   if dm else "#6B7280"
-    border   = "rgba(255,255,255,0.07)" if dm else "rgba(0,51,160,0.10)"
-    inp      = "#252538"   if dm else "#FFFFFF"
-    plab     = SECONDARY   if dm else PRIMARY
-
+    
+    if dm:
+        bg_color = "#0A0A0F"
+        text_color = "#FFFFFF"
+        secondary_text = "#CCCCCC"
+        card_bg = "#15151F"
+        border = "rgba(255,255,255,0.1)"
+    else:
+        bg_color = "#F5F7FB"
+        text_color = "#1A1A2E"
+        secondary_text = "#6B7280"
+        card_bg = "#FFFFFF"
+        border = "rgba(0,0,0,0.1)"
+    
     st.markdown(f"""
     <style>
-    .stApp {{
-        background: {bg};
-        color: {text};
-        font-family: "Inter","Segoe UI",system-ui,sans-serif;
+    /* Hide default Streamlit padding */
+    .main .block-container {{
+        padding-top: 1rem;
+        padding-bottom: 0rem;
+        max-width: 1400px;
     }}
+    
     /* Header */
     .app-header {{
-        background: linear-gradient(100deg, {PRIMARY} 0%, {SECONDARY} 100%);
-        padding: 1.4rem 2.4rem;
-        border-radius: 0 0 16px 16px;
-        margin-bottom: 1.8rem;
-        box-shadow: 0 4px 24px rgba(0,51,160,0.18);
+        background: linear-gradient(135deg, {PRIMARY}, {SECONDARY});
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        color: white;
     }}
+    
     .app-header h1 {{
-        color:#fff; font-size:1.85rem; font-weight:700;
-        margin:0; letter-spacing:-.3px;
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 700;
     }}
+    
     .app-header p {{
-        color:rgba(255,255,255,.82); margin:.3rem 0 0; font-size:.9rem;
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.85rem;
     }}
-    .ver-badge {{
-        background:rgba(255,255,255,.18); color:#fff;
-        padding:.28rem .85rem; border-radius:20px; font-size:.8rem;
-    }}
-    /* Cards */
-    .card {{
-        background:{card}; border:1px solid {border};
-        border-radius:13px; padding:1.6rem;
-        margin-bottom:1.4rem;
-        box-shadow:0 2px 10px rgba(0,0,0,.05);
-    }}
-    .card-title {{
-        color:{plab}; font-size:1.08rem; font-weight:600;
-        border-bottom:2px solid {PRIMARY}20;
-        padding-bottom:.65rem; margin-bottom:1.1rem;
-    }}
-    /* Upload zone */
-    .upload-zone {{
-        border:2px dashed {PRIMARY}50; border-radius:11px;
-        padding:1.8rem; text-align:center;
-        background:{"#1A1A2E" if dm else LIGHT_BG};
-        margin-bottom:.9rem;
-    }}
-    .upload-zone p {{ color:{muted}; margin:0; font-size:.88rem; }}
-    .upload-zone strong {{ color:{plab}; font-size:1rem; }}
-    /* File strip */
-    .file-strip {{
-        background:{"#252538" if dm else LIGHT_BG};
-        border:1px solid {PRIMARY}22; border-radius:9px;
-        padding:.8rem 1rem; margin:.6rem 0 1.1rem;
-        display:flex; align-items:center; gap:.9rem;
-    }}
-    .file-strip .badge {{
-        background:{PRIMARY}; color:#fff;
-        font-size:.7rem; font-weight:700;
-        padding:.18rem .5rem; border-radius:5px; letter-spacing:.4px;
-    }}
-    .file-strip .fname {{ color:{plab}; font-weight:600; font-size:.96rem; }}
-    .file-strip .fmeta {{ color:{muted}; font-size:.83rem; }}
-    /* Info box */
-    .info-box {{
-        background:{"#1A2A3A" if dm else "#E8F4FD"};
-        border-left:3px solid {SECONDARY};
-        border-radius:0 8px 8px 0;
-        padding:.7rem 1rem; margin:.6rem 0;
-        font-size:.88rem; color:{text};
-    }}
-    /* Buttons */
-    .stButton > button {{
-        background:{PRIMARY}; color:#fff !important;
-        border:none; padding:.6rem 1.4rem;
-        border-radius:8px; font-weight:600; font-size:.93rem;
-        width:100%; transition:background .2s,transform .15s;
-        box-shadow:0 2px 8px rgba(0,51,160,.2);
-    }}
-    .stButton > button:hover {{
-        background:{SECONDARY}; transform:translateY(-1px);
-    }}
-    /* Inputs */
-    .stTextInput > div > div > input,
-    .stTextArea  > div > div > textarea,
-    .stSelectbox > div > div {{
-        background:{inp} !important; color:{text} !important;
-        border-color:{border} !important; border-radius:8px !important;
-    }}
-    /* Progress */
-    .stProgress > div > div > div > div {{ background:{PRIMARY}; }}
-    /* Sidebar */
+    
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {{
-        background:{surface}; border-right:1px solid {border};
+        background-color: {card_bg};
+        border-right: 1px solid {border};
     }}
-    section[data-testid="stSidebar"] * {{ color:{text} !important; }}
+    
+    /* Sidebar content - scrollable only when needed */
+    .sidebar-section {{
+        margin-bottom: 1.5rem;
+    }}
+    
+    .sidebar-title {{
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+        color: {PRIMARY};
+        border-bottom: 2px solid {PRIMARY};
+        display: inline-block;
+        padding-bottom: 0.25rem;
+    }}
+    
+    .step-item {{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0.5rem 0;
+        color: {secondary_text};
+        font-size: 0.85rem;
+    }}
+    
+    .step-number {{
+        background: {PRIMARY};
+        color: white;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: bold;
+    }}
+    
+    .feature-tag {{
+        display: inline-block;
+        background: {PRIMARY}15;
+        color: {PRIMARY};
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        margin: 0.2rem;
+    }}
+    
+    /* Language List - Scrollable Container */
+    .language-scroll {{
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 0.5rem;
+        padding-right: 0.5rem;
+    }}
+    
+    .language-scroll::-webkit-scrollbar {{
+        width: 4px;
+    }}
+    
+    .language-scroll::-webkit-scrollbar-track {{
+        background: {border};
+        border-radius: 4px;
+    }}
+    
+    .language-scroll::-webkit-scrollbar-thumb {{
+        background: {PRIMARY};
+        border-radius: 4px;
+    }}
+    
+    .lang-item {{
+        padding: 0.3rem 0.5rem;
+        font-size: 0.8rem;
+        color: {secondary_text};
+        border-radius: 6px;
+    }}
+    
+    .lang-item:hover {{
+        background: {PRIMARY}10;
+        color: {PRIMARY};
+    }}
+    
+    .lang-code {{
+        color: {PRIMARY};
+        font-size: 0.7rem;
+        margin-left: 0.5rem;
+    }}
+    
+    /* Main Content Card */
+    .main-card {{
+        background: {card_bg};
+        border-radius: 12px;
+        padding: 1.5rem;
+        border: 1px solid {border};
+        margin-bottom: 1rem;
+    }}
+    
+    /* Upload Zone */
+    .upload-zone {{
+        border: 2px dashed {PRIMARY}40;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        background: {PRIMARY}05;
+        margin-bottom: 1rem;
+    }}
+    
+    /* File Info */
+    .file-info {{
+        background: {PRIMARY}10;
+        border-radius: 10px;
+        padding: 0.75rem;
+        margin: 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }}
+    
+    .file-badge {{
+        background: {PRIMARY};
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }}
+    
+    .file-name {{
+        font-weight: 500;
+        font-size: 0.85rem;
+        flex: 1;
+    }}
+    
     /* Footer */
     .footer {{
-        text-align:center; padding:1.8rem 1rem 1rem;
-        margin-top:1.8rem; border-top:1px solid {border};
-        color:{muted}; font-size:.83rem;
+        text-align: center;
+        padding: 1rem;
+        color: {secondary_text};
+        font-size: 0.7rem;
+        border-top: 1px solid {border};
+        margin-top: 1rem;
     }}
-    .footer a {{ color:{plab}; text-decoration:none; }}
-    {"" if not dm else f"""
-    ::-webkit-scrollbar {{ width:7px; background:#0D0D1A; }}
-    ::-webkit-scrollbar-thumb {{ background:{PRIMARY}; border-radius:4px; }}
-    """}
-    </style>""", unsafe_allow_html=True)
+    
+    /* Dark Mode Toggle */
+    .dark-toggle {{
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
+        z-index: 999;
+        background: {card_bg};
+        border: 1px solid {border};
+        border-radius: 50px;
+        padding: 0.3rem 0.8rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+    }}
+    
+    /* Responsive */
+    @media (max-width: 768px) {{
+        .main .block-container {{
+            padding: 0.5rem;
+        }}
+        .main-card {{
+            padding: 1rem;
+        }}
+        .upload-zone {{
+            padding: 1rem;
+        }}
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Layout helpers
+# Sidebar Content
 # ══════════════════════════════════════════════════════════════════════════
-
-def _header():
-    st.markdown("""
-    <div class="app-header">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;">
-        <div>
-          <h1>SABIO &nbsp;|&nbsp; Translate</h1>
-          <p>Layout-preserving document translation — PDF, Word, and Excel</p>
-        </div>
-        <span class="ver-badge">v3.0</span>
-      </div>
-    </div>""", unsafe_allow_html=True)
-
 
 def _sidebar():
     with st.sidebar:
-        label = "Switch to Light Mode" if st.session_state.dark_mode else "Switch to Dark Mode"
-        if st.button(label, use_container_width=True):
+        # Brand
+        st.markdown("""
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+            <h1 style="font-size: 1.8rem; margin: 0; background: linear-gradient(135deg, #0066CC, #00A3E0); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SABIO</h1>
+            <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">Enterprise Translation</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Instructions
+        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-title">📖 How to Use</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="step-item">
+            <span class="step-number">1</span>
+            <span>Upload your document</span>
+        </div>
+        <div class="step-item">
+            <span class="step-number">2</span>
+            <span>Select languages</span>
+        </div>
+        <div class="step-item">
+            <span class="step-number">3</span>
+            <span>Click Translate</span>
+        </div>
+        <div class="step-item">
+            <span class="step-number">4</span>
+            <span>Download result</span>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Supported Languages Button
+        if st.button("🌍 Supported Languages", use_container_width=True, key="lang_btn"):
+            st.session_state.show_languages = not st.session_state.show_languages
+        
+        # Language List - Only this scrolls
+        if st.session_state.show_languages:
+            st.markdown('<div class="language-scroll">', unsafe_allow_html=True)
+            for code, name in SUPPORTED_LANGUAGES.items():
+                st.markdown(f"""
+                <div class="lang-item">
+                    {name}
+                    <span class="lang-code">{code}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Features
+        st.markdown('<div class="sidebar-section" style="margin-top: 1rem;">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-title">✨ Features</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div>
+            <span class="feature-tag">Preserves formatting</span>
+            <span class="feature-tag">Images & logos</span>
+            <span class="feature-tag">Tables & charts</span>
+            <span class="feature-tag">Headers & footers</span>
+            <span class="feature-tag">25+ languages</span>
+            <span class="feature-tag">Batch translation</span>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Dark Mode Toggle
+        dm = st.session_state.dark_mode
+        toggle_label = "🌙 Dark Mode" if not dm else "☀️ Light Mode"
+        if st.button(toggle_label, use_container_width=True):
             st.session_state.dark_mode = not st.session_state.dark_mode
             st.rerun()
 
-        st.divider()
-        st.markdown("#### How it works")
-        st.markdown(
-            "1. Upload a PDF, DOCX, or XLSX file  \n"
-            "2. Source language is detected automatically  \n"
-            "3. Choose a target language  \n"
-            "4. Download the translated file — logos, tables, and "
-            "formatting are preserved exactly"
-        )
-        st.divider()
-        st.markdown(
-            '<div class="info-box" style="border-left-color:#0033A0">'
-            "<strong>What is preserved?</strong><br>"
-            "Images &amp; logos &nbsp;·&nbsp; Table borders &amp; shading &nbsp;·&nbsp; "
-            "Fonts &amp; colours &nbsp;·&nbsp; Headers &amp; footers &nbsp;·&nbsp; "
-            "Merged cells &nbsp;·&nbsp; Charts"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        st.divider()
-        with st.expander("Supported languages"):
-            for code, name in SUPPORTED_LANGUAGES.items():
-                st.markdown(f"- **{name}** `{code}`")
-
 
 # ══════════════════════════════════════════════════════════════════════════
-# Document translator panel
+# Main Content
 # ══════════════════════════════════════════════════════════════════════════
 
-def _doc_panel():
-    st.markdown('<div class="card"><div class="card-title">Document Translator</div>', unsafe_allow_html=True)
-
+def _main_content():
+    # Header
+    st.markdown("""
+    <div class="app-header">
+        <h1>Document Translator</h1>
+        <p>Translate your documents while preserving all original formatting</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Main Card
+    st.markdown('<div class="main-card">', unsafe_allow_html=True)
+    
+    # Upload Zone
     st.markdown("""
     <div class="upload-zone">
-        <strong>Select or drop a file</strong>
-        <p>PDF · DOCX · XLSX &nbsp;—&nbsp; up to 200 MB</p>
-    </div>""", unsafe_allow_html=True)
-
+        <div style="font-size: 2rem;">📄</div>
+        <div><strong>Upload your document</strong></div>
+        <div style="font-size: 0.8rem; opacity: 0.7;">PDF · DOCX · XLSX · Up to 200 MB</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     uploaded = st.file_uploader(
-        "file", type=["pdf", "docx", "xlsx"],
-        label_visibility="collapsed", key="doc_up",
+        "",
+        type=["pdf", "docx", "xlsx"],
+        label_visibility="collapsed",
+        key="doc_upload"
     )
-
+    
+    # File info if uploaded
     if uploaded:
-        ok, msg = validate_file(uploaded)
-        if not ok:
-            st.error(msg)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
-
-        ext   = get_file_extension(uploaded.name)
+        ext = get_file_extension(uploaded.name)
         badge = get_file_icon(uploaded.name)
         st.markdown(f"""
-        <div class="file-strip">
-          <span class="badge">{badge}</span>
-          <div>
-            <div class="fname">{uploaded.name}</div>
-            <div class="fmeta">{format_file_size(uploaded.size)} &nbsp;·&nbsp;
-                               {get_file_type_display(ext)}</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-    col_a, col_b, col_c = st.columns([1, 1, 1])
-    with col_a:
-        auto = st.checkbox("Auto-detect source language", value=True)
-    with col_b:
-        if auto:
-            src = "auto"
-            st.caption("Source: Auto-detect")
+        <div class="file-info">
+            <span class="file-badge">{badge}</span>
+            <span class="file-name">{uploaded.name}</span>
+            <span style="font-size: 0.7rem; opacity: 0.6;">{format_file_size(uploaded.size)}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Language Selection
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        auto_detect = st.checkbox("Auto-detect source language", value=True)
+        if auto_detect:
+            source_lang = "auto"
+            st.caption("✨ Language will be detected automatically")
         else:
-            src = st.selectbox(
-                "Source language",
+            source_lang = st.selectbox(
+                "Source Language",
                 list(SUPPORTED_LANGUAGES.keys()),
-                format_func=lambda c: SUPPORTED_LANGUAGES[c],
-                key="doc_src",
+                format_func=lambda x: SUPPORTED_LANGUAGES[x],
+                key="src_lang"
             )
-    with col_c:
-        tgt = st.selectbox(
-            "Target language",
+    
+    with col2:
+        target_lang = st.selectbox(
+            "Target Language",
             list(SUPPORTED_LANGUAGES.keys()),
-            format_func=lambda c: SUPPORTED_LANGUAGES[c],
-            key="doc_tgt",
-            index=0,   # English first
-        )
-
-    if st.button("Translate Document", use_container_width=True):
-        if uploaded is None:
-            st.warning("Please upload a file before translating.")
-        else:
-            _run(uploaded, src, tgt)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ── Core translation runner ────────────────────────────────────────────────
-
-def _run(uploaded, src: str, tgt: str):
-    progress = st.progress(0)
-    status   = st.empty()
-
-    try:
-        ext = get_file_extension(uploaded.name)
-
-        # 1 ── Extract text for language detection
-        status.text("Reading document...")
-        progress.progress(15)
-        uploaded.seek(0)
-
-        if ext == ".pdf":
-            sample_text = extract_pdf_text(uploaded)
-        elif ext == ".docx":
-            sample_text = extract_docx_text(uploaded)
-        elif ext == ".xlsx":
-            sample_text = extract_excel_text(uploaded)
-        else:
-            st.error(f"Unsupported file type: {ext}")
-            return
-
-        if not sample_text or not sample_text.strip():
-            st.error(
-                "No readable text was found.  The file may be scanned, "
-                "encrypted, or empty."
-            )
-            return
-
-        # 2 ── Detect source language
-        status.text("Detecting language...")
-        progress.progress(30)
-
-        if src == "auto":
-            detected = detect_language(sample_text)
-            if detected:
-                src = detected
-                st.info(f"Detected language: {get_language_name(detected)}")
-            else:
-                src = "en"
-                st.warning("Language could not be detected — defaulting to English.")
-
-        if src == tgt:
-            st.warning("Source and target languages are the same — nothing to translate.")
-            return
-
-        # 3 ── Build translate callables bound to src/tgt
-        progress.progress(40)
-
-        def _translate_one(text: str) -> str:
-            """Single-string fallback (used for OCR and Quick Text)."""
-            if not text or not text.strip():
-                return text
-            return translate_text(text, src, tgt) or text
-
-        def _translate_batch(strings: list[str]) -> dict[str, str]:
-            """
-            Fast path: batch + parallel translation of many strings at once.
-            Returns dict mapping original → translated.
-            """
-            return translate_many(strings, src, tgt)
-
-        # 4 ── Translate in-place (batch mode)
-        status.text("Translating — batching requests for speed...")
-        progress.progress(55)
-        uploaded.seek(0)
-
-        if ext == ".pdf":
-            out_buf = translate_pdf_inplace(uploaded, _translate_one,
-                                            translate_many_fn=_translate_batch)
-            mime    = "application/pdf"
-            dl_ext  = ".pdf"
-            dl_lbl  = "Download Translated PDF"
-
-        elif ext == ".docx":
-            out_buf = translate_docx_inplace(uploaded, _translate_one,
-                                             translate_many_fn=_translate_batch)
-            mime    = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            dl_ext  = ".docx"
-            dl_lbl  = "Download Translated Word Document"
-
-        elif ext == ".xlsx":
-            out_buf = translate_xlsx_inplace(uploaded, _translate_one,
-                                             translate_many_fn=_translate_batch)
-            mime    = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            dl_ext  = ".xlsx"
-            dl_lbl  = "Download Translated Excel File"
-
-        progress.progress(95)
-
-        if out_buf is None:
-            st.error("Translation failed.  Check the warnings above for details.")
-            return
-
-        progress.progress(100)
-        status.text("Complete.")
-        st.success("Translation complete.  All formatting, images, and tables are preserved.")
-
-        ts = datetime.now().strftime("%Y%m%d_%H%M")
-        st.download_button(
-            label     = dl_lbl,
-            data      = out_buf,
-            file_name = f"sabio_translated_{ts}{dl_ext}",
-            mime      = mime,
-            use_container_width=True,
-        )
-
-    finally:
-        progress.empty()
-        status.empty()
-
-
-# ══════════════════════════════════════════════════════════════════════════
-# Quick Text panel
-# ══════════════════════════════════════════════════════════════════════════
-
-def _text_panel():
-    st.markdown('<div class="card"><div class="card-title">Quick Text Translator</div>', unsafe_allow_html=True)
-
-    text_in = st.text_area(
-        "Text", placeholder="Paste or type text here...",
-        height=120, key="qt_in", label_visibility="collapsed",
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        qs = st.selectbox(
-            "From",
-            ["auto"] + list(SUPPORTED_LANGUAGES.keys()),
-            format_func=lambda c: "Auto-detect" if c == "auto" else SUPPORTED_LANGUAGES[c],
-            key="qt_src",
-        )
-    with c2:
-        qt = st.selectbox(
-            "To",
-            list(SUPPORTED_LANGUAGES.keys()),
-            format_func=lambda c: SUPPORTED_LANGUAGES[c],
-            key="qt_tgt",
+            format_func=lambda x: SUPPORTED_LANGUAGES[x],
             index=0,
+            key="tgt_lang"
         )
-
-    if st.button("Translate Text", key="qt_btn", use_container_width=True):
-        if not text_in.strip():
-            st.warning("Please enter some text.")
+    
+    # Translate Button
+    if st.button("🚀 Translate Document", use_container_width=True, key="translate_btn"):
+        if uploaded is None:
+            st.error("❌ Please upload a document first")
         else:
-            with st.spinner("Translating..."):
-                s = qs
-                if qs == "auto":
-                    det = detect_language(text_in)
-                    if det:
-                        st.info(f"Detected: {get_language_name(det)}")
-                        s = det
-                    else:
-                        s = "en"
-                result = translate_text(text_in, s, qt)
-            if result:
-                st.success("Done.")
-                st.text_area("Result", result, height=160, key="qt_out")
-                st.caption(f"{get_language_name(s)} → {get_language_name(qt)}")
-            else:
-                st.error("Translation failed.")
-
-    if text_in:
-        st.caption(f"{len(text_in.split())} words · {len(text_in)} characters")
-
-    st.markdown("</div>", unsafe_allow_html=True)
+            _run_translation(uploaded, source_lang, target_lang, auto_detect)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown(f"""
+    <div class="footer">
+        <strong>SABIO GROUP</strong> — Enterprise Document Translation<br>
+        © {datetime.now().year} Sabio Group. All rights reserved.
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Entry point
+# Translation Runner
+# ══════════════════════════════════════════════════════════════════════════
+
+def _run_translation(uploaded, source_lang, target_lang, auto_detect):
+    with st.spinner("Processing..."):
+        try:
+            ext = get_file_extension(uploaded.name)
+            uploaded.seek(0)
+            
+            # Extract text for detection
+            if ext == ".pdf":
+                sample_text = extract_pdf_text(uploaded)
+            elif ext == ".docx":
+                sample_text = extract_docx_text(uploaded)
+            elif ext == ".xlsx":
+                sample_text = extract_excel_text(uploaded)
+            else:
+                st.error("Unsupported file type")
+                return
+            
+            if not sample_text or not sample_text.strip():
+                st.error("No readable text found in the document")
+                return
+            
+            # Detect language if auto
+            if auto_detect:
+                detected = detect_language(sample_text)
+                if detected:
+                    source_lang = detected
+                    st.success(f"✅ Detected: {get_language_name(detected)}")
+                else:
+                    source_lang = "en"
+                    st.warning("⚠️ Could not detect language, defaulting to English")
+            
+            if source_lang == target_lang:
+                st.warning("⚠️ Source and target languages are the same")
+                return
+            
+            # Translation functions
+            def _translate_one(text):
+                return translate_text(text, source_lang, target_lang) or text
+            
+            def _translate_batch(strings):
+                return translate_many(strings, source_lang, target_lang)
+            
+            # Translate
+            uploaded.seek(0)
+            
+            if ext == ".pdf":
+                out = translate_pdf_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
+                mime = "application/pdf"
+                dl_ext = ".pdf"
+            elif ext == ".docx":
+                out = translate_docx_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                dl_ext = ".docx"
+            elif ext == ".xlsx":
+                out = translate_xlsx_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                dl_ext = ".xlsx"
+            else:
+                out = None
+            
+            if out:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+                st.success("🎉 Translation complete! All formatting preserved.")
+                st.download_button(
+                    label="📥 Download Translated Document",
+                    data=out,
+                    file_name=f"sabio_translated_{timestamp}{dl_ext}",
+                    mime=mime,
+                    use_container_width=True,
+                )
+            else:
+                st.error("❌ Translation failed. Please check the document and try again.")
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Main
 # ══════════════════════════════════════════════════════════════════════════
 
 def main():
-    _sidebar()
     _css()
-    _header()
-
-    col_l, col_r = st.columns([2, 1])
-    with col_l:
-        _doc_panel()
-    with col_r:
-        _text_panel()
-
-    st.markdown(
-        f'<div class="footer">'
-        f'<strong style="color:{PRIMARY};font-size:.95rem;">SABIO GROUP</strong><br>'
-        f'&copy; {datetime.now().year} Sabio Group. All rights reserved. &nbsp;|&nbsp; '
-        f'Enterprise Document Translation &nbsp;·&nbsp; v3.0 &nbsp;·&nbsp; '
-        f'<a href="#">Privacy</a> &nbsp;·&nbsp; <a href="#">Terms</a>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    _sidebar()
+    _main_content()
 
 
 if __name__ == "__main__":
