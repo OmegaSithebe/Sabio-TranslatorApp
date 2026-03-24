@@ -1,529 +1,323 @@
 """
-app.py — Sabio Translate
-Single-Page Universal Document Translator
+app.py — Sabio Language Translator
+Flask backend serving the HTML/CSS/JS frontend.
+All translation logic lives in utils/; this file only handles HTTP routing.
 """
 
+import io
+import os
+import uuid
+import logging
 from datetime import datetime
-import streamlit as st
+from functools import partial
 
-from utils.pdf_reader   import extract_pdf_text, translate_pdf_inplace
-from utils.docx_reader  import extract_docx_text, translate_docx_inplace
-from utils.excel_reader import extract_excel_text, translate_xlsx_inplace
-from utils.translator   import (
+from flask import Flask, request, jsonify, send_file, render_template
+
+from utils.translator import (
+    detect_language,
     translate_text,
     translate_many,
-    detect_language,
     get_language_name,
-    SUPPORTED_LANGUAGES,
 )
 from utils.file_utils import (
-    validate_file,
-    format_file_size,
-    get_file_icon,
-    get_file_type_display,
     get_file_extension,
+    get_file_icon,
+    format_file_size,
+    allowed_file_type,
+    MAX_FILE_SIZE,
 )
+from utils.pdf_reader   import extract_pdf_text,   translate_pdf_inplace
+from utils.docx_reader  import extract_docx_text,  translate_docx_inplace
+from utils.excel_reader import extract_excel_text, translate_xlsx_inplace
 
-# ── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Sabio Translate",
-    page_icon="🌐",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
 
-# ── Brand tokens ───────────────────────────────────────────────────────────
-PRIMARY = "#0066CC"
-SECONDARY = "#00A3E0"
-
-# ── Session state ──────────────────────────────────────────────────────────
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-if "show_languages" not in st.session_state:
-    st.session_state.show_languages = False
+# In-memory session store.  Each entry keyed by a UUID string.
+# { session_id: { bytes, filename, ext, detected_code,
+#                 translated_bytes, target_lang, target_name, preview } }
+_store: dict[str, dict] = {}
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# CSS - Clean, Single Page Layout
-# ══════════════════════════════════════════════════════════════════════════
+# ── helpers ────────────────────────────────────────────────────────────────
 
-def _css() -> None:
-    dm = st.session_state.dark_mode
-    
-    if dm:
-        bg_color = "#0A0A0F"
-        text_color = "#FFFFFF"
-        secondary_text = "#CCCCCC"
-        card_bg = "#15151F"
-        border = "rgba(255,255,255,0.1)"
-    else:
-        bg_color = "#F5F7FB"
-        text_color = "#1A1A2E"
-        secondary_text = "#6B7280"
-        card_bg = "#FFFFFF"
-        border = "rgba(0,0,0,0.1)"
-    
-    st.markdown(f"""
-    <style>
-    /* Hide default Streamlit padding */
-    .main .block-container {{
-        padding-top: 1rem;
-        padding-bottom: 0rem;
-        max-width: 1400px;
-    }}
-    
-    /* Header */
-    .app-header {{
-        background: linear-gradient(135deg, {PRIMARY}, {SECONDARY});
-        padding: 1rem 2rem;
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-        color: white;
-    }}
-    
-    .app-header h1 {{
-        margin: 0;
-        font-size: 1.8rem;
-        font-weight: 700;
-    }}
-    
-    .app-header p {{
-        margin: 0.25rem 0 0;
-        opacity: 0.9;
-        font-size: 0.85rem;
-    }}
-    
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {{
-        background-color: {card_bg};
-        border-right: 1px solid {border};
-    }}
-    
-    /* Sidebar content - scrollable only when needed */
-    .sidebar-section {{
-        margin-bottom: 1.5rem;
-    }}
-    
-    .sidebar-title {{
-        font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 0.75rem;
-        color: {PRIMARY};
-        border-bottom: 2px solid {PRIMARY};
-        display: inline-block;
-        padding-bottom: 0.25rem;
-    }}
-    
-    .step-item {{
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0.5rem 0;
-        color: {secondary_text};
-        font-size: 0.85rem;
-    }}
-    
-    .step-number {{
-        background: {PRIMARY};
-        color: white;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.7rem;
-        font-weight: bold;
-    }}
-    
-    .feature-tag {{
-        display: inline-block;
-        background: {PRIMARY}15;
-        color: {PRIMARY};
-        padding: 0.2rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        margin: 0.2rem;
-    }}
-    
-    /* Language List - Scrollable Container */
-    .language-scroll {{
-        max-height: 300px;
-        overflow-y: auto;
-        margin-top: 0.5rem;
-        padding-right: 0.5rem;
-    }}
-    
-    .language-scroll::-webkit-scrollbar {{
-        width: 4px;
-    }}
-    
-    .language-scroll::-webkit-scrollbar-track {{
-        background: {border};
-        border-radius: 4px;
-    }}
-    
-    .language-scroll::-webkit-scrollbar-thumb {{
-        background: {PRIMARY};
-        border-radius: 4px;
-    }}
-    
-    .lang-item {{
-        padding: 0.3rem 0.5rem;
-        font-size: 0.8rem;
-        color: {secondary_text};
-        border-radius: 6px;
-    }}
-    
-    .lang-item:hover {{
-        background: {PRIMARY}10;
-        color: {PRIMARY};
-    }}
-    
-    .lang-code {{
-        color: {PRIMARY};
-        font-size: 0.7rem;
-        margin-left: 0.5rem;
-    }}
-    
-    /* Main Content Card */
-    .main-card {{
-        background: {card_bg};
-        border-radius: 12px;
-        padding: 1.5rem;
-        border: 1px solid {border};
-        margin-bottom: 1rem;
-    }}
-    
-    /* Upload Zone */
-    .upload-zone {{
-        border: 2px dashed {PRIMARY}40;
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        background: {PRIMARY}05;
-        margin-bottom: 1rem;
-    }}
-    
-    /* File Info */
-    .file-info {{
-        background: {PRIMARY}10;
-        border-radius: 10px;
-        padding: 0.75rem;
-        margin: 1rem 0;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }}
-    
-    .file-badge {{
-        background: {PRIMARY};
-        color: white;
-        padding: 0.2rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: 600;
-    }}
-    
-    .file-name {{
-        font-weight: 500;
-        font-size: 0.85rem;
-        flex: 1;
-    }}
-    
-    /* Footer */
-    .footer {{
-        text-align: center;
-        padding: 1rem;
-        color: {secondary_text};
-        font-size: 0.7rem;
-        border-top: 1px solid {border};
-        margin-top: 1rem;
-    }}
-    
-    /* Dark Mode Toggle */
-    .dark-toggle {{
-        position: fixed;
-        bottom: 1rem;
-        right: 1rem;
-        z-index: 999;
-        background: {card_bg};
-        border: 1px solid {border};
-        border-radius: 50px;
-        padding: 0.3rem 0.8rem;
-        font-size: 0.8rem;
-        cursor: pointer;
-    }}
-    
-    /* Responsive */
-    @media (max-width: 768px) {{
-        .main .block-container {{
-            padding: 0.5rem;
-        }}
-        .main-card {{
-            padding: 1rem;
-        }}
-        .upload-zone {{
-            padding: 1rem;
-        }}
-    }}
-    </style>
-    """, unsafe_allow_html=True)
+def _translate_one_fn(src: str, tgt: str):
+    def fn(text: str) -> str:
+        if not text or not text.strip():
+            return text
+        return translate_text(text, src, tgt) or text
+    return fn
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# Sidebar Content
-# ══════════════════════════════════════════════════════════════════════════
-
-def _sidebar():
-    with st.sidebar:
-        # Brand
-        st.markdown("""
-        <div style="text-align: center; margin-bottom: 1.5rem;">
-            <h1 style="font-size: 1.8rem; margin: 0; background: linear-gradient(135deg, #0066CC, #00A3E0); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SABIO</h1>
-            <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">Enterprise Translation</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Instructions
-        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-title">📖 How to Use</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="step-item">
-            <span class="step-number">1</span>
-            <span>Upload your document</span>
-        </div>
-        <div class="step-item">
-            <span class="step-number">2</span>
-            <span>Select languages</span>
-        </div>
-        <div class="step-item">
-            <span class="step-number">3</span>
-            <span>Click Translate</span>
-        </div>
-        <div class="step-item">
-            <span class="step-number">4</span>
-            <span>Download result</span>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Supported Languages Button
-        if st.button("🌍 Supported Languages", use_container_width=True, key="lang_btn"):
-            st.session_state.show_languages = not st.session_state.show_languages
-        
-        # Language List - Only this scrolls
-        if st.session_state.show_languages:
-            st.markdown('<div class="language-scroll">', unsafe_allow_html=True)
-            for code, name in SUPPORTED_LANGUAGES.items():
-                st.markdown(f"""
-                <div class="lang-item">
-                    {name}
-                    <span class="lang-code">{code}</span>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Features
-        st.markdown('<div class="sidebar-section" style="margin-top: 1rem;">', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-title">✨ Features</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div>
-            <span class="feature-tag">Preserves formatting</span>
-            <span class="feature-tag">Images & logos</span>
-            <span class="feature-tag">Tables & charts</span>
-            <span class="feature-tag">Headers & footers</span>
-            <span class="feature-tag">25+ languages</span>
-            <span class="feature-tag">Batch translation</span>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Dark Mode Toggle
-        dm = st.session_state.dark_mode
-        toggle_label = "🌙 Dark Mode" if not dm else "☀️ Light Mode"
-        if st.button(toggle_label, use_container_width=True):
-            st.session_state.dark_mode = not st.session_state.dark_mode
-            st.rerun()
+def _translate_many_fn(src: str, tgt: str):
+    def fn(strings: list[str]) -> dict[str, str]:
+        return translate_many(strings, src, tgt)
+    return fn
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# Main Content
-# ══════════════════════════════════════════════════════════════════════════
+def _extract_preview(data: bytes | io.BytesIO, ext: str) -> str:
+    try:
+        raw = data.read() if hasattr(data, "read") else data
+        if ext == "pdf":
+            import fitz
+            doc  = fitz.open(stream=raw, filetype="pdf")
+            text = "\n".join(page.get_text() for page in doc[:3])
+            doc.close()
+            return text[:1200].strip()
+        if ext == "docx":
+            from docx import Document
+            doc  = Document(io.BytesIO(raw))
+            text = "\n".join(p.text for p in doc.paragraphs[:30] if p.text.strip())
+            return text[:1200].strip()
+    except Exception:
+        pass
+    try:
+        return data.decode("utf-8", errors="ignore")[:1200] if isinstance(data, bytes) else ""
+    except Exception:
+        return ""
 
-def _main_content():
-    # Header
-    st.markdown("""
-    <div class="app-header">
-        <h1>Document Translator</h1>
-        <p>Translate your documents while preserving all original formatting</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Main Card
-    st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    
-    # Upload Zone
-    st.markdown("""
-    <div class="upload-zone">
-        <div style="font-size: 2rem;">📄</div>
-        <div><strong>Upload your document</strong></div>
-        <div style="font-size: 0.8rem; opacity: 0.7;">PDF · DOCX · XLSX · Up to 200 MB</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    uploaded = st.file_uploader(
-        "",
-        type=["pdf", "docx", "xlsx"],
-        label_visibility="collapsed",
-        key="doc_upload"
-    )
-    
-    # File info if uploaded
-    if uploaded:
-        ext = get_file_extension(uploaded.name)
-        badge = get_file_icon(uploaded.name)
-        st.markdown(f"""
-        <div class="file-info">
-            <span class="file-badge">{badge}</span>
-            <span class="file-name">{uploaded.name}</span>
-            <span style="font-size: 0.7rem; opacity: 0.6;">{format_file_size(uploaded.size)}</span>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Language Selection
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        auto_detect = st.checkbox("Auto-detect source language", value=True)
-        if auto_detect:
-            source_lang = "auto"
-            st.caption("✨ Language will be detected automatically")
+
+def _bytes_to_text(data: bytes, ext: str) -> str:
+    try:
+        if ext == "pdf":
+            import fitz
+            doc  = fitz.open(stream=data, filetype="pdf")
+            text = "\n".join(page.get_text() for page in doc)
+            doc.close()
+            return text
+        if ext == "docx":
+            from docx import Document
+            doc = Document(io.BytesIO(data))
+            return "\n".join(p.text for p in doc.paragraphs)
+    except Exception:
+        pass
+    try:
+        return data.decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _mime(fmt: str) -> str:
+    return {
+        "pdf":  "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "txt":  "text/plain; charset=utf-8",
+        "html": "text/html; charset=utf-8",
+        "rtf":  "application/rtf",
+        "odt":  "application/vnd.oasis.opendocument.text",
+    }.get(fmt, "application/octet-stream")
+
+
+# ── routes ─────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    if not allowed_file_type(f.filename):
+        ext = get_file_extension(f.filename) or "unknown"
+        return jsonify({
+            "error": f"'{ext}' is not supported. Please upload PDF, DOCX, or XLSX."
+        }), 400
+
+    file_bytes = f.read()
+
+    if len(file_bytes) > MAX_FILE_SIZE:
+        mb = len(file_bytes) / (1024 * 1024)
+        return jsonify({"error": f"File exceeds 200 MB limit ({mb:.1f} MB)."}), 400
+
+    ext = (get_file_extension(f.filename) or "").lstrip(".")
+
+    # Detect language from extracted text
+    bio = io.BytesIO(file_bytes)
+    bio.name = f.filename
+    sample = ""
+    try:
+        if ext == "pdf":
+            sample = extract_pdf_text(bio) or ""
+        elif ext == "docx":
+            sample = extract_docx_text(bio) or ""
+        elif ext in ("xlsx", "xls"):
+            sample = extract_excel_text(bio) or ""
         else:
-            source_lang = st.selectbox(
-                "Source Language",
-                list(SUPPORTED_LANGUAGES.keys()),
-                format_func=lambda x: SUPPORTED_LANGUAGES[x],
-                key="src_lang"
-            )
-    
-    with col2:
-        target_lang = st.selectbox(
-            "Target Language",
-            list(SUPPORTED_LANGUAGES.keys()),
-            format_func=lambda x: SUPPORTED_LANGUAGES[x],
-            index=0,
-            key="tgt_lang"
-        )
-    
-    # Translate Button
-    if st.button("🚀 Translate Document", use_container_width=True, key="translate_btn"):
-        if uploaded is None:
-            st.error("❌ Please upload a document first")
-        else:
-            _run_translation(uploaded, source_lang, target_lang, auto_detect)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Footer
-    st.markdown(f"""
-    <div class="footer">
-        <strong>SABIO GROUP</strong> — Enterprise Document Translation<br>
-        © {datetime.now().year} Sabio Group. All rights reserved.
-    </div>
-    """, unsafe_allow_html=True)
+            sample = file_bytes.decode("utf-8", errors="ignore")[:2000]
+    except Exception as exc:
+        logging.warning(f"Text extraction failed: {exc}")
 
-
-# ══════════════════════════════════════════════════════════════════════════
-# Translation Runner
-# ══════════════════════════════════════════════════════════════════════════
-
-def _run_translation(uploaded, source_lang, target_lang, auto_detect):
-    with st.spinner("Processing..."):
+    detected_code = detect_language(sample) if sample else None
+    confidence = 0
+    if sample and detected_code:
         try:
-            ext = get_file_extension(uploaded.name)
-            uploaded.seek(0)
-            
-            # Extract text for detection
-            if ext == ".pdf":
-                sample_text = extract_pdf_text(uploaded)
-            elif ext == ".docx":
-                sample_text = extract_docx_text(uploaded)
-            elif ext == ".xlsx":
-                sample_text = extract_excel_text(uploaded)
-            else:
-                st.error("Unsupported file type")
-                return
-            
-            if not sample_text or not sample_text.strip():
-                st.error("No readable text found in the document")
-                return
-            
-            # Detect language if auto
-            if auto_detect:
-                detected = detect_language(sample_text)
-                if detected:
-                    source_lang = detected
-                    st.success(f"✅ Detected: {get_language_name(detected)}")
-                else:
-                    source_lang = "en"
-                    st.warning("⚠️ Could not detect language, defaulting to English")
-            
-            if source_lang == target_lang:
-                st.warning("⚠️ Source and target languages are the same")
-                return
-            
-            # Translation functions
-            def _translate_one(text):
-                return translate_text(text, source_lang, target_lang) or text
-            
-            def _translate_batch(strings):
-                return translate_many(strings, source_lang, target_lang)
-            
-            # Translate
-            uploaded.seek(0)
-            
-            if ext == ".pdf":
-                out = translate_pdf_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
-                mime = "application/pdf"
-                dl_ext = ".pdf"
-            elif ext == ".docx":
-                out = translate_docx_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
-                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                dl_ext = ".docx"
-            elif ext == ".xlsx":
-                out = translate_xlsx_inplace(uploaded, _translate_one, translate_many_fn=_translate_batch)
-                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                dl_ext = ".xlsx"
-            else:
-                out = None
-            
-            if out:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-                st.success("🎉 Translation complete! All formatting preserved.")
-                st.download_button(
-                    label="📥 Download Translated Document",
-                    data=out,
-                    file_name=f"sabio_translated_{timestamp}{dl_ext}",
-                    mime=mime,
-                    use_container_width=True,
-                )
-            else:
-                st.error("❌ Translation failed. Please check the document and try again.")
-                
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+            from langdetect import detect_langs, DetectorFactory
+            DetectorFactory.seed = 42
+            langs = detect_langs(sample[:500])
+            if langs and langs[0].lang.split("-")[0] == detected_code.split("-")[0]:
+                confidence = int(langs[0].prob * 100)
+        except Exception:
+            confidence = 85  # reasonable default
+
+    detected_code = detected_code or "en"
+    detected_name = get_language_name(detected_code)
+
+    session_id = str(uuid.uuid4())
+    _store[session_id] = {
+        "bytes":          file_bytes,
+        "filename":       f.filename,
+        "ext":            ext,
+        "detected_code":  detected_code,
+    }
+
+    return jsonify({
+        "session_id":    session_id,
+        "filename":      f.filename,
+        "size":          format_file_size(len(file_bytes)),
+        "detected_lang": detected_name,
+        "detected_code": detected_code,
+        "confidence":    confidence,
+        "icon":          get_file_icon(f.filename),
+    })
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# Main
-# ══════════════════════════════════════════════════════════════════════════
+@app.route("/api/translate", methods=["POST"])
+def translate():
+    data = request.get_json(silent=True) or {}
+    session_id  = data.get("session_id")
+    target_lang = data.get("target_lang", "es")
 
-def main():
-    _css()
-    _sidebar()
-    _main_content()
+    if not session_id or session_id not in _store:
+        return jsonify({"error": "Session not found. Please re-upload your file."}), 400
+
+    entry      = _store[session_id]
+    file_bytes = entry["bytes"]
+    ext        = entry["ext"]
+    filename   = entry["filename"]
+    src        = entry.get("detected_code", "auto")
+
+    bio = io.BytesIO(file_bytes)
+    bio.name = filename
+
+    one_fn  = _translate_one_fn(src, target_lang)
+    many_fn = _translate_many_fn(src, target_lang)
+
+    try:
+        if ext == "pdf":
+            result = translate_pdf_inplace(bio, one_fn, translate_many_fn=many_fn)
+        elif ext == "docx":
+            result = translate_docx_inplace(bio, one_fn, translate_many_fn=many_fn)
+        elif ext in ("xlsx", "xls"):
+            result = translate_xlsx_inplace(bio, one_fn, translate_many_fn=many_fn)
+        else:
+            # Plain text fallback
+            text   = file_bytes.decode("utf-8", errors="ignore")
+            xlated = translate_text(text, src, target_lang) or text
+            result = io.BytesIO(xlated.encode("utf-8"))
+    except Exception as exc:
+        logging.error(f"Translation error: {exc}")
+        return jsonify({"error": str(exc)}), 500
+
+    if result is None:
+        return jsonify({"error": "Translation failed — the file may be corrupt or unsupported."}), 500
+
+    # result is a BytesIO; read its bytes for storage
+    result.seek(0)
+    result_bytes = result.read()
+
+    preview = _extract_preview(result_bytes, ext)
+
+    # Count pages
+    pages = 1
+    try:
+        if ext == "pdf":
+            import fitz
+            doc   = fitz.open(stream=result_bytes, filetype="pdf")
+            pages = len(doc)
+            doc.close()
+    except Exception:
+        pass
+
+    entry["translated_bytes"] = result_bytes
+    entry["target_lang"]      = target_lang
+    entry["target_name"]      = get_language_name(target_lang)
+    entry["translated_ext"]   = ext
+    entry["preview"]          = preview
+
+    return jsonify({
+        "preview":     preview,
+        "target_lang": get_language_name(target_lang),
+        "pages":       pages,
+    })
+
+
+@app.route("/api/download/<session_id>/<fmt>")
+def download(session_id: str, fmt: str):
+    if session_id not in _store:
+        return jsonify({"error": "Session not found"}), 404
+
+    entry = _store[session_id]
+    translated_bytes: bytes | None = entry.get("translated_bytes")
+    if translated_bytes is None:
+        return jsonify({"error": "No translation available. Translate first."}), 400
+
+    ext        = entry.get("translated_ext", "txt")
+    ts         = datetime.now().strftime("%Y%m%d_%H%M")
+    base_name  = f"sabio_translated_{ts}"
+    fmt        = fmt.lower()
+
+    # Return native format directly
+    if fmt == ext:
+        bio = io.BytesIO(translated_bytes)
+        bio.seek(0)
+        return send_file(bio, mimetype=_mime(fmt), as_attachment=True,
+                         download_name=f"{base_name}.{fmt}")
+
+    if fmt == "txt":
+        text = _bytes_to_text(translated_bytes, ext)
+        bio  = io.BytesIO(text.encode("utf-8"))
+        return send_file(bio, mimetype=_mime("txt"), as_attachment=True,
+                         download_name=f"{base_name}.txt")
+
+    if fmt == "html":
+        text = _bytes_to_text(translated_bytes, ext)
+        lang = entry.get("target_name", "")
+        html = (
+            f"<!DOCTYPE html>\n<html lang=\"en\">\n<head>"
+            f"<meta charset=\"utf-8\"><title>Sabio Translation — {lang}</title>"
+            f"<style>body{{font-family:sans-serif;max-width:860px;margin:2rem auto;"
+            f"padding:0 1rem;line-height:1.7}}</style></head>\n"
+            f"<body><pre style=\"white-space:pre-wrap\">{text}</pre></body>\n</html>"
+        )
+        bio = io.BytesIO(html.encode("utf-8"))
+        return send_file(bio, mimetype=_mime("html"), as_attachment=True,
+                         download_name=f"{base_name}.html")
+
+    if fmt == "docx" and ext != "docx":
+        try:
+            from utils.docx_reader import create_translated_docx
+            text       = _bytes_to_text(translated_bytes, ext)
+            docx_bytes = create_translated_docx(text)
+            bio        = io.BytesIO(docx_bytes)
+            return send_file(bio, mimetype=_mime("docx"), as_attachment=True,
+                             download_name=f"{base_name}.docx")
+        except Exception:
+            pass
+
+    # Fallback: return as plain text
+    text = _bytes_to_text(translated_bytes, ext)
+    bio  = io.BytesIO(text.encode("utf-8"))
+    return send_file(bio, mimetype=_mime("txt"), as_attachment=True,
+                     download_name=f"{base_name}.txt")
 
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=True, port=5000)

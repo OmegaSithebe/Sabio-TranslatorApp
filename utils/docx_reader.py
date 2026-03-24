@@ -16,7 +16,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Callable, Optional
-import streamlit as st
+import logging
 
 # ── Register all OOXML namespaces so ET keeps original prefixes ────────────
 for _pfx, _uri in {
@@ -72,7 +72,7 @@ def extract_docx_text(file) -> Optional[str]:
                         parts.append(cell.text)
         return "\n".join(parts)
     except Exception as exc:
-        st.error(f"Could not read Word document: {exc}")
+        logging.error(f"Could not read Word document: {exc}")
         return None
 
 
@@ -94,14 +94,12 @@ def translate_docx_inplace(
         file.seek(0)
         raw = file.read()
     except Exception as exc:
-        st.error(f"Could not read file: {exc}")
-        return None
+        raise RuntimeError(f"Could not read file: {exc}") from exc
 
     try:
         src = zipfile.ZipFile(io.BytesIO(raw), "r")
     except Exception as exc:
-        st.error(f"File does not appear to be a valid DOCX: {exc}")
-        return None
+        raise ValueError(f"File does not appear to be a valid DOCX: {exc}") from exc
 
     text_parts = {"word/document.xml"}
     for name in src.namelist():
