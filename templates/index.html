@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sabio Language Translator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<!-- ── Background orbs ──────────────────────────────────────────────────── -->
+<div class="orb orb-1" aria-hidden="true"></div>
+<div class="orb orb-2" aria-hidden="true"></div>
+<div class="orb orb-3" aria-hidden="true"></div>
+
+<!-- ── Overlay (drawer backdrop) ────────────────────────────────────────── -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+
+<!-- ── Side Drawer ──────────────────────────────────────────────────────── -->
+<aside class="drawer" id="drawer" role="dialog" aria-label="How to use">
+  <div class="drawer-header">
+    <span class="drawer-title">How to Use</span>
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close menu">&#x2715;</button>
+  </div>
+  <div class="drawer-body">
+    <ol class="drawer-steps">
+      <li><span class="step-num yellow">1</span>
+        <div><strong>Upload Your Document</strong><br>Drop or select a PDF, DOCX, XLSX, TXT, RTF, ODT, or PPTX file.</div>
+      </li>
+      <li><span class="step-num purple">2</span>
+        <div><strong>Review Detected Language</strong><br>Sabio AI automatically identifies the source language and confidence score.</div>
+      </li>
+      <li><span class="step-num yellow">3</span>
+        <div><strong>Select Target Language</strong><br>Choose from 60+ languages organised by region.</div>
+      </li>
+      <li><span class="step-num purple">4</span>
+        <div><strong>Translate</strong><br>Click the translate button and watch the progress bar.</div>
+      </li>
+      <li><span class="step-num yellow">5</span>
+        <div><strong>Download Your Translation</strong><br>Pick your preferred format: PDF, DOCX, TXT, RTF, HTML, or ODT.</div>
+      </li>
+      <li><span class="step-num purple">6</span>
+        <div><strong>Light &amp; Dark Mode</strong><br>Toggle the ☀️ / 🌙 button in the navbar to switch themes.</div>
+      </li>
+    </ol>
+  </div>
+  <div class="drawer-footer">Powered by Sabio AI &middot; v1.0.0</div>
+</aside>
+
+<!-- ── Navbar ────────────────────────────────────────────────────────────── -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="navbar-inner">
+    <div class="nav-left">
+      <button class="icon-btn" onclick="openDrawer()" aria-label="Open menu" title="How to use">
+        &#9776;
+      </button>
+      <div class="brand">
+        <div class="logo-tile" aria-hidden="true">S</div>
+        <span class="app-name">Sabio <span class="yellow">Language Translator</span></span>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <span id="themeIcon">🌙</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main content ──────────────────────────────────────────────────────── -->
+<main class="main-content">
+
+  <!-- Hero -->
+  <section class="hero" aria-label="Hero">
+    <div class="hero-badge">✦ AI-Powered Translation</div>
+    <h1 class="hero-title">
+      Translate Any <span class="yellow">Document</span><br>
+      Into Any <span class="purple">Language</span>
+    </h1>
+    <p class="hero-sub">
+      Upload your file, select a target language, and let Sabio AI handle the rest —
+      formatting, images, and tables preserved exactly.
+    </p>
+  </section>
+
+  <!-- Main card -->
+  <div class="card" role="main">
+
+    <!-- ── STATE 1: Upload zone ────────────────────────────────────────── -->
+    <div id="stateUpload">
+
+      <!-- File info bar (hidden until file chosen) -->
+      <div class="file-info-bar hidden" id="fileInfoBar">
+        <div class="file-info-left">
+          <span class="file-type-icon" id="fileTypeIcon">📄</span>
+          <div class="file-details">
+            <span class="file-name" id="fileName">document.pdf</span>
+            <span class="file-size" id="fileSize">0 KB</span>
+          </div>
+        </div>
+        <button class="remove-btn" id="removeBtn" onclick="resetUpload()" aria-label="Remove file">&#x2715;</button>
+      </div>
+
+      <!-- Detected language bar (hidden until file chosen) -->
+      <div class="detected-bar hidden" id="detectedBar">
+        <span class="detected-label">Detected Language:</span>
+        <span class="detected-name" id="detectedLang">—</span>
+        <span class="confidence-badge" id="confidenceBadge">—%</span>
+      </div>
+
+      <!-- Upload zone -->
+      <label class="upload-zone" id="uploadZone" for="fileInput"
+             role="button" aria-label="Upload document">
+        <input type="file" id="fileInput" name="file" hidden
+               accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.pptx,.xlsx" />
+        <div class="upload-icon" aria-hidden="true">&#x2601;&#xFE0F;</div>
+        <div class="upload-title">Drop your file here or <span class="yellow">browse</span></div>
+        <div class="upload-sub">Supported formats:</div>
+        <div class="format-pills">
+          <span class="pill">PDF</span>
+          <span class="pill">DOCX</span>
+          <span class="pill">TXT</span>
+          <span class="pill">RTF</span>
+          <span class="pill">PPTX</span>
+          <span class="pill">XLSX</span>
+          <span class="pill">ODT</span>
+        </div>
+      </label>
+
+      <!-- ── Translation settings (hidden until file chosen) ──────────── -->
+      <div class="settings-section hidden" id="settingsSection">
+        <div class="settings-label">Translate to</div>
+        <select class="lang-select" id="targetLang" aria-label="Target language">
+          <optgroup label="— African Languages —">
+            <option value="af">Afrikaans</option>
+            <option value="am">Amharic</option>
+            <option value="ar">Arabic</option>
+            <option value="ha">Hausa</option>
+            <option value="ig">Igbo</option>
+            <option value="mg">Malagasy</option>
+            <option value="so">Somali</option>
+            <option value="sw">Swahili</option>
+            <option value="yo">Yoruba</option>
+            <option value="zu">Zulu</option>
+          </optgroup>
+          <optgroup label="— Americas Languages —">
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="pt">Portuguese</option>
+            <option value="fr">French</option>
+            <option value="ht">Haitian Creole</option>
+          </optgroup>
+          <optgroup label="— Asian Languages —">
+            <option value="bn">Bengali</option>
+            <option value="zh-CN">Chinese (Simplified)</option>
+            <option value="zh-TW">Chinese (Traditional)</option>
+            <option value="hi">Hindi</option>
+            <option value="id">Indonesian</option>
+            <option value="ja">Japanese</option>
+            <option value="km">Khmer</option>
+            <option value="ko">Korean</option>
+            <option value="ms">Malay</option>
+            <option value="my">Myanmar / Burmese</option>
+            <option value="ne">Nepali</option>
+            <option value="fa">Persian / Farsi</option>
+            <option value="pa">Punjabi</option>
+            <option value="si">Sinhala</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+            <option value="th">Thai</option>
+            <option value="ur">Urdu</option>
+            <option value="vi">Vietnamese</option>
+          </optgroup>
+          <optgroup label="— European Languages —">
+            <option value="sq">Albanian</option>
+            <option value="be">Belarusian</option>
+            <option value="bs">Bosnian</option>
+            <option value="bg">Bulgarian</option>
+            <option value="ca">Catalan</option>
+            <option value="hr">Croatian</option>
+            <option value="cs">Czech</option>
+            <option value="da">Danish</option>
+            <option value="nl">Dutch</option>
+            <option value="et">Estonian</option>
+            <option value="fi">Finnish</option>
+            <option value="gl">Galician</option>
+            <option value="de">German</option>
+            <option value="el">Greek</option>
+            <option value="hu">Hungarian</option>
+            <option value="is">Icelandic</option>
+            <option value="ga">Irish</option>
+            <option value="it">Italian</option>
+            <option value="lv">Latvian</option>
+            <option value="lt">Lithuanian</option>
+            <option value="mk">Macedonian</option>
+            <option value="mt">Maltese</option>
+            <option value="no">Norwegian</option>
+            <option value="pl">Polish</option>
+            <option value="ro">Romanian</option>
+            <option value="ru">Russian</option>
+            <option value="sr">Serbian</option>
+            <option value="sk">Slovak</option>
+            <option value="sl">Slovenian</option>
+            <option value="sv">Swedish</option>
+            <option value="tr">Turkish</option>
+            <option value="uk">Ukrainian</option>
+            <option value="cy">Welsh</option>
+          </optgroup>
+        </select>
+
+        <button class="translate-btn" id="translateBtn" onclick="startTranslation()">
+          ⚡ Translate Document
+        </button>
+      </div>
+
+    </div><!-- /#stateUpload -->
+
+
+    <!-- ── STATE 2: Loading ────────────────────────────────────────────── -->
+    <div id="stateLoading" class="hidden">
+      <div class="loading-wrap">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="loading-dots" aria-hidden="true">
+          <span class="dot dot-1"></span>
+          <span class="dot dot-2"></span>
+          <span class="dot dot-3"></span>
+        </div>
+        <h2 class="loading-title">Translating your document…</h2>
+        <p class="loading-sub" id="loadingSub">Preparing…</p>
+        <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </div>
+    </div><!-- /#stateLoading -->
+
+
+    <!-- ── STATE 3: Result ─────────────────────────────────────────────── -->
+    <div id="stateResult" class="hidden">
+
+      <div class="result-header">
+        <div class="check-tile" aria-hidden="true">&#x2713;</div>
+        <div>
+          <h2 class="result-title">Translation Complete</h2>
+          <p class="result-sub" id="resultSub">Translated to — · — pages</p>
+        </div>
+      </div>
+
+      <div class="preview-panel" id="previewPanel" aria-label="Translation preview">
+        <pre id="previewText"></pre>
+      </div>
+
+      <div class="format-label">Download format</div>
+      <div class="format-grid" role="group" aria-label="Download format selector">
+        <button class="fmt-btn active" data-fmt="pdf"  onclick="selectFormat(this)">📄 PDF</button>
+        <button class="fmt-btn"        data-fmt="docx" onclick="selectFormat(this)">📝 DOCX</button>
+        <button class="fmt-btn"        data-fmt="txt"  onclick="selectFormat(this)">📃 TXT</button>
+        <button class="fmt-btn"        data-fmt="rtf"  onclick="selectFormat(this)">🗒️ RTF</button>
+        <button class="fmt-btn"        data-fmt="html" onclick="selectFormat(this)">🌐 HTML</button>
+        <button class="fmt-btn"        data-fmt="odt"  onclick="selectFormat(this)">📋 ODT</button>
+      </div>
+
+      <button class="download-btn" id="downloadBtn" onclick="downloadFile()">
+        ⬇ Download as <span id="dlFmtLabel">PDF</span>
+      </button>
+
+      <button class="reset-btn" onclick="resetAll()">↩ Translate another document</button>
+
+    </div><!-- /#stateResult -->
+
+  </div><!-- /.card -->
+
+</main>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>

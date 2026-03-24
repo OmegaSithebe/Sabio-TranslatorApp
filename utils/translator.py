@@ -23,7 +23,6 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-import streamlit as st
 
 SUPPORTED_LANGUAGES: dict[str, str] = {
     "en": "English",
@@ -59,12 +58,12 @@ SUPPORTED_LANGUAGES: dict[str, str] = {
 
 # ── Tuning knobs ───────────────────────────────────────────────────────────
 # Max characters packed into a single Google Translate request.
-# Google's hard limit is 5 000; we stay safely below it.
-_BATCH_CHARS   = 4_000
+# Google's hard limit is 5 000; 4 800 maximises batch size while staying safe.
+_BATCH_CHARS   = 4_800
 
 # Number of parallel translation threads.
-# 8 is a safe default that avoids rate-limiting on most connections.
-_WORKERS       = 8
+# 16 threads sends more batches simultaneously, cutting round-trips in half.
+_WORKERS       = 16
 
 # Sentinel used to join/split strings within a single request.
 # Must be something that (a) won't appear in real text and (b) survives
@@ -72,8 +71,8 @@ _WORKERS       = 8
 _SEP           = " ⏎⏎ "
 _SEP_PATTERN   = re.compile(r"\s*⏎⏎\s*")
 
-_RETRIES       = 3
-_RETRY_DELAY   = 1.0
+_RETRIES       = 2
+_RETRY_DELAY   = 0.5
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -241,8 +240,7 @@ def _translate_one(text: str, source: str, target: str) -> Optional[str]:
     try:
         from deep_translator import GoogleTranslator
     except ImportError:
-        st.error("deep-translator not installed. Run: pip install deep-translator")
-        return None
+        raise ImportError("deep-translator not installed. Run: pip install deep-translator")
 
     for attempt in range(_RETRIES):
         try:

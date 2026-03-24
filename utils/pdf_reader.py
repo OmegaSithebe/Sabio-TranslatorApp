@@ -18,8 +18,8 @@ Images, logos, table borders, and all non-text content are untouched.
 """
 
 import io
+import logging
 from typing import Callable, Optional
-import streamlit as st
 
 
 def extract_pdf_text(file) -> Optional[str]:
@@ -32,7 +32,7 @@ def extract_pdf_text(file) -> Optional[str]:
         doc.close()
         return "\n\n".join(parts) or ""
     except Exception as exc:
-        st.error(f"Could not read PDF: {exc}")
+        logging.error(f"Could not read PDF: {exc}")
         return None
 
 
@@ -55,20 +55,18 @@ def translate_pdf_inplace(
     try:
         import fitz
     except ImportError:
-        st.error("PyMuPDF not installed. Run: pip install pymupdf")
-        return None
+        raise ImportError("PyMuPDF not installed. Run: pip install pymupdf")
 
     try:
         file.seek(0)
         doc = fitz.open(stream=file.read(), filetype="pdf")
     except Exception as exc:
-        st.error(f"Could not open PDF: {exc}")
-        return None
+        raise RuntimeError(f"Could not open PDF: {exc}") from exc
 
     has_text = any(page.get_text().strip() for page in doc)
 
     if not has_text:
-        st.warning(
+        logging.warning(
             "This PDF has no selectable text (fully scanned). "
             "Install pytesseract and Pillow for OCR support."
         )
@@ -109,7 +107,7 @@ def translate_pdf_inplace(
         if not all_originals:
             # Nothing to translate — return original unchanged
             buf = io.BytesIO()
-            doc.save(buf, garbage=4, deflate=True)
+            doc.save(buf, garbage=2, deflate=True)
             doc.close()
             buf.seek(0)
             return buf
@@ -142,15 +140,14 @@ def translate_pdf_inplace(
                 _insert_text(page, item)
 
         buf = io.BytesIO()
-        doc.save(buf, garbage=4, deflate=True)
+        doc.save(buf, garbage=2, deflate=True)
         doc.close()
         buf.seek(0)
         return buf
 
     except Exception as exc:
-        st.error(f"Error translating PDF: {exc}")
         doc.close()
-        return None
+        raise RuntimeError(f"Error translating PDF: {exc}") from exc
 
 
 # ── Text insertion helper ─────────────────────────────────────────────────
@@ -181,11 +178,10 @@ def _translate_scanned(doc, translate_fn: Callable) -> Optional[io.BytesIO]:
         from PIL import Image
         import io as _io
     except ImportError:
-        st.error(
+        raise ImportError(
             "Scanned PDF detected. Install pytesseract and Pillow: "
             "pip install pytesseract Pillow"
         )
-        return None
 
     for page in doc:
         mat      = page.get_pixmap(dpi=200)
@@ -199,7 +195,7 @@ def _translate_scanned(doc, translate_fn: Callable) -> Optional[io.BytesIO]:
                                 fontsize=11, fontname="helv", color=(0, 0, 0))
 
     buf = io.BytesIO()
-    doc.save(buf, garbage=4, deflate=True)
+    doc.save(buf, garbage=2, deflate=True)
     buf.seek(0)
     return buf
 
