@@ -26,8 +26,8 @@ const themeIcon       = document.getElementById('themeIcon');
 
 /* ── Theme ─────────────────────────────────────────────────────────────── */
 (function initTheme() {
-  let saved = 'dark';
-  try { saved = localStorage.getItem('sabio-theme') || 'dark'; } catch (e) {}
+  let saved = 'light';
+  try { saved = localStorage.getItem('sabio-theme') || 'light'; } catch (e) {}
   applyTheme(saved);
 })();
 
