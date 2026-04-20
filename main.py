@@ -13,22 +13,24 @@ from functools import partial
 
 from flask import Flask, request, jsonify, send_file, render_template
 
-from utils.translator import (
+from utils.core import (
     detect_language,
     translate_text,
     translate_many,
     get_language_name,
-)
-from utils.file_utils import (
     get_file_extension,
     get_file_icon,
     format_file_size,
     allowed_file_type,
     MAX_FILE_SIZE,
+    extract_pdf_text,
+    translate_pdf_inplace,
+    extract_docx_text,
+    translate_docx_inplace,
+    extract_excel_text,
+    translate_xlsx_inplace,
+    create_translated_docx,
 )
-from utils.pdf_reader   import extract_pdf_text,   translate_pdf_inplace
-from utils.docx_reader  import extract_docx_text,  translate_docx_inplace
-from utils.excel_reader import extract_excel_text, translate_xlsx_inplace
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -303,7 +305,6 @@ def download(session_id: str, fmt: str):
 
     if fmt == "docx" and ext != "docx":
         try:
-            from utils.docx_reader import create_translated_docx
             text       = _bytes_to_text(translated_bytes, ext)
             docx_bytes = create_translated_docx(text)
             bio        = io.BytesIO(docx_bytes)
